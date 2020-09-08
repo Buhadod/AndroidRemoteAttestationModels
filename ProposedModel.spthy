@@ -26,7 +26,6 @@ SecWorldInfoNotRooted(deviceID,IMEI,venderPubKey,SW_signingKey),
 SecWorldInfoRooted(deviceID,IMEI,venderPubKey,SW_signingKey),
 
 We assume only one app per developer, for now
-DevServerAuthedApp(devPubKey,codeHash,IMEI, venderVerifyKey, secret))  <== would need to be expanded for multi dev servers
 DevServerKey(ltkD,pk(ltkD))
 
 VenderServerKeys(venderPrivKey, pk(venderPrivKey), venderSignKey, pk(venderSignKey))
@@ -75,9 +74,8 @@ rule CreateDevice:
   rule CreateApp:
   [
     Fr(~codeHash), Fr (~secret),
-    !DevServerKey(devPrivKey,devPupKey,devSignKey,devVerifyKey)
+    !DevServerKey(devPrivKey,devPupKey,devSignKey,devVerifyKey),
     !VenderServerKeys(venderPrivKey, venderPubKey, venderSignKey, venderVerifyKey)
-
   ]
   --[ DevAppLink(~codeHash, ~secret,devPupKey)]->
   [
@@ -88,7 +86,7 @@ rule CreateDevice:
   rule InstallAppDevice:
   [
       !DevApp(codeHash, secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey),
-      !SecWorldInfoNotRooted(deviceID,IMEI,venderPubKey,secWorldSignKey),
+      !SecWorldInfoNotRooted(deviceID,IMEI,venderPubKey,secWorldSignKey)
   ]
   --[ 
     InstallAppInDevice(codeHash,devPupKey,venderPubKey,deviceID,IMEI),
@@ -96,7 +94,6 @@ rule CreateDevice:
    ]->
   [
       !App(codeHash, deviceID,devVerifyKey),
-      !DevServerAuthedApp(devPupKey,codeHash, IMEI, venderVerifyKey, secret),
       !VenderServerKnownDevKey(venderPubKey,devPupKey)
   ]
   
@@ -179,7 +176,7 @@ rule VS_DS_App_6:
     [
       DS_State(nd),
       !DevServerKey(devPrivKey,devPubKey,devSignKey,devVerifyKey),
-      !DevServerAuthedApp(devPubKey,codeHash,IMEI, pk(venderSignKey),secret),
+      !DevApp(codeHash, secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, pk(venderSignKey)),
       In(<IMEI, 'NotRooted',nd, codeHash,sessionPubKey,sigma>)
     ]
     --[ DevSerSendSec(secret,nd,IMEI,codeHash) ]->
