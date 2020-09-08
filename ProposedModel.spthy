@@ -50,6 +50,16 @@ rule CreateVender:
     !VenderServerKeys(~venderPrivKey, pk(~venderPrivKey), ~venderSignKey, pk(~venderSignKey))
   ]
 
+rule VenderComprimse:
+  [ 
+    !VenderServerKeys(venderPrivKey, venderPubKey, venderSignKey, pk(venderSignKey))
+  ]
+  --[ VenderComprimse(venderPubKey) ]->
+  [
+    Out(<venderPrivKey, venderSignKey>)
+  ]
+
+
 rule CreateDevice:
   [ 
     Fr(~deviceID), Fr(~IMEI), Fr(~secWorldSignKey),
@@ -93,8 +103,8 @@ rule CreateDevice:
     TrustedApp(codeHash,secret,IMEI,deviceID)
    ]->
   [
-      !App(codeHash, deviceID,devVerifyKey),
-      !VenderServerKnownDevKey(venderPubKey,devPupKey)
+      !App(codeHash, deviceID,devVerifyKey)
+      /*!VenderServerKnownDevKey(venderPubKey,devPupKey)*/
   ]
   
 
@@ -161,10 +171,10 @@ rule DS_VS_DS_5:
   in
     [
       !VenderServerInfo(venderPrivKey, venderSignKey, pk(SecWorldSignKey), IMEI),
-      !VenderServerKnownDevKey(venderPubKey,devPubKey),
+      /*!VenderServerKnownDevKey(venderPubKey,devPubKey),*/
       In (blob)
     ]
-    --[ VenderChecked(IMEI, nd, codeHash, sessionPubKey, devPubKey, blob) ]->
+    --[ VenderChecked(IMEI, nd, codeHash, sessionPubKey, blob) ]->
     [ 
       Out(<IMEI, 'NotRooted',nd, codeHash,sessionPubKey,sigma>) 
     ]
@@ -225,3 +235,12 @@ lemma onlyTrustedAppsCanGetSecret:
         ==> (Ex #j IMEI. TrustedApp(codeHash,secret,IMEI,deviceID) @ #j & #j < #i )"
 
 end
+/*
+
+   !DevApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey)
+   AppInstalled(on IMEI)
+   KU(secret),
+  =>
+   VenderComprimse(venderPubKey) || DevComprised(devPupKey) || SecWorldComprimsed(IMEI)
+
+   */
