@@ -54,9 +54,27 @@ rule VenderComprimse:
   [ 
     !VenderServerKeys(venderPrivKey, venderPubKey, venderSignKey, pk(venderSignKey))
   ]
-  --[ VenderComprimse(venderPubKey) ]->
+  --[ VenderComprimsed(venderPubKey) ]->
   [
     Out(<venderPrivKey, venderSignKey>)
+  ]
+
+rule DevComprimse:
+  [ 
+    !DevServerKey(devPrivKey, devPubKey, devSignKey, pk(devSignKey))
+  ]
+  --[ DevComprimsed(devPubKey) ]->
+  [
+    Out(<devPrivKey, devSignKey>)
+  ]
+
+rule SecWorldComprimse:
+  [ 
+    !SecWorldInfoNotRooted(deviceID,IMEI,venderPubKey,secWorldSignKey)
+  ]
+  --[ SecWorldComprimsed(IMEI) ]->
+  [
+    Out(<IMEI>)
   ]
 
 
@@ -87,7 +105,10 @@ rule CreateDevice:
     !DevServerKey(devPrivKey,devPupKey,devSignKey,devVerifyKey),
     !VenderServerKeys(venderPrivKey, venderPubKey, venderSignKey, venderVerifyKey)
   ]
-  --[ DevAppLink(~codeHash, ~secret,devPupKey)]->
+  --[ DevAppLinkoOld(~codeHash, ~secret,devPupKey),
+      DevCreateApp(~codeHash, ~secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey)
+  
+  ]->
   [
     !DevApp(~codeHash, ~secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey)
   ]
@@ -219,8 +240,8 @@ rule App_SecWorld_App_8:
 
 
 lemma types [sources]:
-" All IMEI nd codeHash sessionPubKey devPubKey blob #i.
-    VenderChecked(IMEI, nd, codeHash, sessionPubKey, devPubKey, blob) @i
+" All IMEI nd codeHash sessionPubKey blob #i.
+    VenderChecked(IMEI, nd, codeHash, sessionPubKey, blob) @i
     ==>   ( Ex #j. AppSend(blob) @ j & #j < #i) 
         | ( Ex #k. KU(<IMEI, nd, codeHash, sessionPubKey>) @ k & #k < #i)"
 
@@ -234,6 +255,16 @@ lemma onlyTrustedAppsCanGetSecret:
       SecWorldSentCode(deviceID,codeHash,secret) @ #i
         ==> (Ex #j IMEI. TrustedApp(codeHash,secret,IMEI,deviceID) @ #j & #j < #i )"
 
+lemma secretLeakedIfEntitiesComprimsed:
+  " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
+      DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
+      & TrustedApp(codeHash,secret,IMEI,deviceID) @ #j
+      & KU(secret) @ #k
+        ==> 
+          ( Ex #a. VenderComprimsed(venderPubKey) @ #a & #i < #j & #i < #a & #a < #k) 
+        | ( Ex #b. DevComprimsed(devPupKey) @ #b       & #i < #j & #i < #b & #b < #k) 
+        | ( Ex #c. SecWorldComprimsed(IMEI) @ #c       & #i < #j & #j < #c & #c < #k) 
+  "
 end
 /*
 
@@ -243,4 +274,18 @@ end
   =>
    VenderComprimse(venderPubKey) || DevComprised(devPupKey) || SecWorldComprimsed(IMEI)
 
+  ( VenderComprimsed(venderPubKey) @ #a | DevComprimsed(devPupKey) @ #b | SecWorldComprimsed(IMEI) @ #c ) 
+
    */
+/*
+  Abdulla comments:
+  lemma secretLeakedIfEntitiesComprimsed:
+  " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j.
+      DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
+      & TrustedApp(codeHash,secret,IMEI,deviceID) @ #j
+        ==> 
+          ( Ex #k #a. KU(secret) @k & #i < #j & VenderComprimsed(venderPubKey) @ #a & #a < #k & #i < #a) 
+        | ( Ex #k #b. KU(secret) @k & #i < #j & DevComprimsed(devPupKey) @ #b       & #b < #k & #i < #b) 
+        | ( Ex #k #c. KU(secret) @k & #i < #j & SecWorldComprimsed(IMEI) @ #c       & #c < #k & #j < #c) 
+  "
+*/
