@@ -277,3 +277,15 @@ end
   ( VenderComprimsed(venderPubKey) @ #a | DevComprimsed(devPupKey) @ #b | SecWorldComprimsed(IMEI) @ #c ) 
 
    */
+/*
+  Abdulla comments:
+  lemma secretLeakedIfEntitiesComprimsed:
+  " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j.
+      DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
+      & TrustedApp(codeHash,secret,IMEI,deviceID) @ #j
+        ==> 
+          ( Ex #k #a. KU(secret) @k & #i < #j & VenderComprimsed(venderPubKey) @ #a & #a < #k & #i < #a) 
+        | ( Ex #k #b. KU(secret) @k & #i < #j & DevComprimsed(devPupKey) @ #b       & #b < #k & #i < #b) 
+        | ( Ex #k #c. KU(secret) @k & #i < #j & SecWorldComprimsed(IMEI) @ #c       & #c < #k & #j < #c) 
+  "
+*/
