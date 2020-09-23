@@ -89,16 +89,6 @@ rule CreateDevice:
     !VenderServerInfo(venderPrivKey, venderSignKey, pk(~secWorldSignKey), ~IMEI) 
   ]
 
-rule CreateUntrustedDevice:
-  [ 
-    Fr(~deviceID), Fr(~IMEI), Fr(~secWorldSignKey),
-    Fr(~venderPrivKey),Fr(~venderPubKey),Fr(~venderSignKey),Fr(~venderVerifyKey)
-  ]
-  --[ ]->
-  [
-    !SecWorldInfoRooted(~deviceID,~IMEI,~venderPubKey,~secWorldSignKey)
-  ]
-
 
   rule CreateDeveloper:
   [ 
@@ -115,7 +105,8 @@ rule CreateUntrustedDevice:
     !DevServerKey(devPrivKey,devPupKey,devSignKey,devVerifyKey),
     !VenderServerKeys(venderPrivKey, venderPubKey, venderSignKey, venderVerifyKey)
   ]
-  --[ DevCreateApp(~codeHash, ~secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey)
+  --[ DevAppLinkoOld(~codeHash, ~secret,devPupKey),
+      DevCreateApp(~codeHash, ~secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey)
   
   ]->
   [
@@ -129,24 +120,14 @@ rule CreateUntrustedDevice:
       !SecWorldInfoNotRooted(deviceID,IMEI,venderPubKey,secWorldSignKey)
   ]
   --[ 
-      InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey)
+    InstallAppInDevice(codeHash,devPupKey,venderPubKey,deviceID,IMEI),
+    TrustedApp(codeHash,secret,IMEI,deviceID)
    ]->
   [
       !App(codeHash, deviceID,devVerifyKey)
+      /*!VenderServerKnownDevKey(venderPubKey,devPupKey)*/
   ]
   
-  
-  rule InstallAppUntrustedDevice:
-  [
-      !DevApp(codeHash, secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, venderVerifyKey),
-      !SecWorldInfoRooted(deviceID,IMEI,venderPubKey,secWorldSignKey)
-  ]
-  --[ 
-      InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey)
-   ]->
-  [
-      !App(codeHash, deviceID,devVerifyKey)
-  ]
 
 /* Protocol rules*/
 rule DS_to_App_1:
@@ -270,15 +251,15 @@ lemma testTrace:
       SecWorldSentCode(deviceID,codeHash,secret) @ i "
 
 lemma onlyTrustedAppsCanGetSecret:
-  " All deviceID codeHash secret devPupKey #i #d.
+  " All deviceID codeHash secret devPupKey #i.
       SecWorldSentCode(deviceID,codeHash,secret) @ #i
-      & (not(DevComprimsed(devPupKey) @ #d))
-        ==> (Ex #j IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #j & #j < #i )"
+        ==> (Ex #j IMEI. TrustedApp(codeHash,secret,IMEI,deviceID) @ #j & #j < #i )"
+        | not ( Ex #b. DevComprimsed(devPupKey) @ #b  
 
 lemma secretLeakedIfEntitiesComprimsed:
   " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
       DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
-      & InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #j
+      & TrustedApp(codeHash,secret,IMEI,deviceID) @ #j
       & KU(secret) @ #k
         ==> 
           ( Ex #a. VenderComprimsed(venderPubKey) @ #a & #i < #j & #i < #a & #a < #k) 
@@ -286,3 +267,14 @@ lemma secretLeakedIfEntitiesComprimsed:
         | ( Ex #c. SecWorldComprimsed(IMEI) @ #c       & #i < #j & #j < #c & #c < #k) 
   "
 end
+/*
+
+   !DevApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey)
+   AppInstalled(on IMEI)
+   KU(secret),
+  =>
+   VenderComprimse(venderPubKey) || DevComprised(devPupKey) || SecWorldComprimsed(IMEI)
+
+  ( VenderComprimsed(venderPubKey) @ #a | DevComprimsed(devPupKey) @ #b | SecWorldComprimsed(IMEI) @ #c ) 
+
+   */
