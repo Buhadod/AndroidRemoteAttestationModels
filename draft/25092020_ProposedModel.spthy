@@ -173,24 +173,6 @@ rule DS_App_SecW_2:
       SecWorld_RequestAtt(nd,codeHash,deviceID)
     ]
 
-rule App_SecW_App_3_Rooted_device:
-  
-  let blob  = aenc(sign (<IMEI, 'Rooted',nd, codeHash, pk(~sessionPrivKey)>,SW_signingKey), venderPubKey)
-
-  in
-    [
-       Fr(~sessionPrivKey),
-       !SecWorldInfoRooted(deviceID,IMEI,venderPubKey,SW_signingKey),
-       SecWorld_RequestAtt(nd,codeHash,deviceID)
-    ]
-  --[ 
-      Attestation(nd,codeHash,deviceID)
-    ]->
-    [ 
-      !SecWorldSessionKey(deviceID,~sessionPrivKey),
-      SecWorld_Attestation(blob)
-    ]
-
 
 rule App_SecW_App_3:
   
@@ -293,6 +275,7 @@ lemma onlyTrustedAppsCanGetSecret:
       & SecWorldSentCode(deviceID,codeHash,secret) @ #j
       & not(Ex #k devPupKeyLocal. DevComprimsed(devPupKeyLocal) @#k & devPupKeyLocal=devPupKey)
         ==> (Ex #l IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #l & #l < #j)"
+
 
 lemma secretLeakedIfEntitiesComprimsed:
   " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
