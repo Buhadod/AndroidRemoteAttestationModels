@@ -229,7 +229,7 @@ rule VS_DS_App_6:
       !DevApp(codeHash, secret,devPupKey,devVerifyKey,devSignKey, venderPubKey, pk(venderSignKey)),
       In(<IMEI, 'NotRooted',nd, codeHash,sessionPubKey,sigma>)
     ]
-    --[ DevSerSendSec(secret,nd,IMEI,codeHash), DevSerSendSecret(devPupKey,codeHash,secret) ]->
+    --[ DevSerSendSec(secret,nd,IMEI,codeHash) ]->
     [ 
       Out( sign( aenc( <secret,codeHash>,sessionPubKey ), devSignKey ) )
     ]
@@ -270,12 +270,10 @@ lemma testTrace:
       SecWorldSentCode(deviceID,codeHash,secret) @ i "
 
 lemma onlyTrustedAppsCanGetSecret:
-  " All deviceID codeHash secret #i #j devPupKey.
-      DevSerSendSecret(devPupKey,codeHash,secret) @ #i
-      & SecWorldSentCode(deviceID,codeHash,secret) @ #j
-      & not(Ex #k devPupKeyLocal. DevComprimsed(devPupKeyLocal) @#k & devPupKeyLocal=devPupKey)
-        ==> (Ex #l IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #l & #l < #j)"
-
+  " All deviceID codeHash secret devPupKey #i #d.
+      SecWorldSentCode(deviceID,codeHash,secret) @ #i
+      & (not(DevComprimsed(devPupKey) @ #d))
+        ==> (Ex #j IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #j & #j < #i )"
 
 lemma secretLeakedIfEntitiesComprimsed:
   " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
