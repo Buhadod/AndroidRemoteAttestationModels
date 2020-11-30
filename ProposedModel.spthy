@@ -1,4 +1,4 @@
-theory AbdullaProtocol
+theory ProposedModel
 begin
 
 builtins: asymmetric-encryption, signing

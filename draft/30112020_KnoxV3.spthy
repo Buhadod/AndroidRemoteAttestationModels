@@ -1,4 +1,4 @@
-theory KnoxV2
+theory KnoxV3
 begin
 
 builtins: asymmetric-encryption, signing
