@@ -27,12 +27,12 @@ builtins: asymmetric-encryption, signing
 /* Set up rules */
 rule CreateVender:
   [ 
-    Fr(~venderPrivKey),Fr(~apiKey), Fr(~auk)
+    Fr(~venderPrivKey)
   ]
   --[ ]->
   [
-    !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
-    !VenderInfo(~apiKey, ~auk)
+    !VenderKeys(~venderPrivKey),
+    !VenderInfo(pk(~venderPrivKey))
   ]
 
 rule VenderComprimse:
@@ -66,13 +66,13 @@ rule SecWorldComprimse:
 
   rule CreateDeveloper:
   [ 
-    Fr(~secret),
-    !VenderInfo(apiKey, auk)
+    Fr(~apiKey), Fr(~auk)
+    !VenderInfo(venderPupKey)
   ]
   --[ ]->
   [
-    !DeveloperSecret(~secret),
-    !DeveloperInfo(apiKey, auk)
+    !DeveloperInfo(venderPupKey, ~apiKey, ~auk),
+    !VenderInfo(venderPupKey, ~apiKey, ~auk)
   ]
 
 rule DevComprimse:
@@ -87,15 +87,25 @@ rule DevComprimse:
 
   rule CreateApp:
   [
-    Fr(~appSHA),
-    !DeveloperInfo(apiKey, auk)
+    Fr(~appSHA), Fr(~secret),
+    !DeveloperInfo(venderPupKey,apiKey, auk)
   ]
   --[ ]->
   [
-    !AppInfo(~appSHA, apiKey, auk)
+    !AppInfo(~appSHA, ~secret, apiKey, auk)
   ]
 
+/* Installation rules*/
 
+rule Install_App_in_Device
+  [
+    !AppInfo(appSHA,secret, apiKey, auk),
+    !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
+  ]
+  --[ Install_App_in_Device(appSHA,secret, apiKey, auk, deviceID)]->
+  [
+      !AppInfo(appSHA, apiKey, deviceID)
+  ]
 
 /* Protocol rules*/
 rule Dev_to_Ven_1:
@@ -142,13 +152,13 @@ rule Dev_to_App_3:
 rule App_to_SecWorld_4:
     [
       In(<nv, arid, apiKey, auk>),
-      !AppInfo(appSHA, apiKey, auk)
+      !AppInfo(appSHA, apiKey, deviceID)
     ]
   --[ 
-      St_App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
+      St_App_to_SecWorld(nv, arid, apiKey, auk, appSHA, deviceID)
     ]->
     [ 
-      !Out_App_to_SecWorld(nv, auk, appSHA),
+      !Out_App_to_SecWorld(nv, auk, appSHA, deviceID),
       !App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
     ]
 
@@ -251,8 +261,8 @@ rule Dev_to_App_11:
       In(<'NotRooted', nv, deviceID, appSHA, uid, arid, auk, apiKey>),
       !Developer_to_App(nv, arid, apiKey, auk),
       !Dev_to_Ven(uid, nv, arid, apiKey),
-      !DeveloperInfo(apiKey,auk),
-      !DeveloperSecret(secret)
+      !AppInfo(appSHA,secret, apiKey, auk),
+      !DeveloperInfo(venderPupKey,apiKey, auk)
     ]
   --[ 
       St_Dev_to_App(nv, uid, arid, auk, apiKey, secret)

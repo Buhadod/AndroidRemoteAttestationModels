@@ -24,12 +24,12 @@ builtins: asymmetric-encryption, signing
 /* Set up rules */
 rule CreateVender:
   [ 
-    Fr(~venderPrivKey),Fr(~apiKey)
+    Fr(~venderPrivKey)
   ]
   --[ ]->
   [
     !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
-    !VenderInfo(~apiKey)
+    !VenderInfo(pk(~venderPrivKey))
   ]
 
 rule VenderComprimse:
@@ -63,13 +63,13 @@ rule SecWorldComprimse:
 
   rule CreateDeveloper:
   [ 
-    Fr(~secret),
-    !VenderInfo(apiKey)
+    Fr(~apiKey),
+    !VenderInfo(venderPupKey)
   ]
   --[ ]->
   [
-    !DeveloperSecret(~secret),
-    !DeveloperInfo(apiKey)
+    !DeveloperInfo(venderPupKey, ~apiKey),
+    !VenderInfo(venderPupKey, ~apiKey)
   ]
 
 rule DevComprimse:
@@ -84,28 +84,39 @@ rule DevComprimse:
 
   rule CreateApp:
   [
-    Fr(~appSHA),
-    !DeveloperInfo(apiKey)
+    Fr(~appSHA), Fr(~secret),
+    !DeveloperInfo(venderPupKey, apiKey)
   ]
   --[ ]->
   [
-    !AppInfo(~appSHA, apiKey)
+    !AppInfo(~appSHA,~secret, apiKey)
   ]
 
+/* Installation rules*/
+
+rule Install_App_in_Device
+  [
+    !AppInfo(appSHA,secret, apiKey),
+    !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
+  ]
+  --[ Install_App_in_Device(appSHA,secret, apiKey, deviceID)]->
+  [
+      !AppInfo(appSHA, apiKey, deviceID)
+  ]
 
 
 /* Protocol rules*/
 rule Ven_to_Dev_1:
     [
       Fr(~nv),
-      !VenderInfo(apiKey)
+      !VenderInfo(venderPupKey, apiKey)
     ]
   --[ 
        St_Vendor_to_Developer(~nv, apiKey)
     ]->
     [ 
       Out( <~nv, apiKey> ),
-      !Vendor_to_Developer(~nv)
+      !Vendor_to_Developer(~nv, apiKey)
     ]
 
 rule Dev_to_App_2:
@@ -124,13 +135,13 @@ rule Dev_to_App_2:
 rule App_to_SecWorld_3:
     [
       In(<nv,apiKey>),
-      !AppInfo(appSHA, apiKey)
+      !AppInfo(appSHA, apiKey, deviceID)
     ]
   --[ 
-      St_App_to_SecWorld(nv)
+      St_App_to_SecWorld(nv, appSHA, apiKey, deviceID)
     ]->
     [ 
-      !App_to_SecWorld(nv),
+      !Out_App_to_SecWorld(nv, appSHA, deviceID),
       !AppInfo_2(nv, appSHA, apiKey)
     ]
 
@@ -140,7 +151,7 @@ rule SecWorld_to_App_4:
 
     in
     [
-      !App_to_SecWorld(nv),
+      !Out_App_to_SecWorld(nv, appSHA, deviceID),
       !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
     ]
   --[ 
@@ -152,7 +163,7 @@ rule SecWorld_to_App_4:
 
 rule App_to_Dev_5:
     [
-      In(blob),
+      !SecWorld_to_App(blob),
       !AppInfo_2(nv, appSHA, apiKey)
     ]
   --[ 
@@ -183,7 +194,8 @@ rule Ven_to_Dev_7:
     in
     [
       In(<blob, nv, apiKey>),
-      !Vendor_to_Developer(~nv),
+      !Vendor_to_Developer(nv, apiKey),
+      !VenderInfo(venderPubKey, apiKey)
       !VenderKeys(venderPrivKey, venderPubKey),
       !VenderDevicesInfo(venderPrivKey, venderSignKey, secWorldSignKey, deviceID) 
     ]
@@ -198,8 +210,8 @@ rule Dev_to_App_8:
     [
       In(<'NotRooted',nv, deviceID, apiKey>),
       !Developer_to_App(nv,apiKey),
-      !DeveloperSecret(secret),
-      !DeveloperInfo(apiKey)
+      !AppInfo(appSHA,secret, apiKey)
+      !DeveloperInfo(venderPupKey, apiKey)
     ]
   --[ 
       St_Dev_to_App(nv, blob, apiKey, secret)
