@@ -221,32 +221,9 @@ rule Dev_to_App_8:
     ]
 
 
-lemma types [sources]:
-" All IMEI nd codeHash sessionPubKey blob #i.
-    VenderChecked(IMEI, nd, codeHash, sessionPubKey, blob) @i
-    ==>   ( Ex #j. AppSend(blob) @ j & #j < #i) 
-        | ( Ex #k. KU(<IMEI, nd, codeHash, sessionPubKey>) @ k & #k < #i)"
-
-lemma testTrace:
+lemma executable:
   exists-trace 
-  " Ex #i deviceID codeHash secret.
-      SecWorldSentCode(deviceID,codeHash,secret) @ i "
+  " Ex #i nv blob apikey secret.
+      St_Dev_to_App(nv, blob, apiKey, secret) @ i "
 
-lemma onlyTrustedAppsCanGetSecret:
-  " All deviceID codeHash secret #i #j devPupKey.
-      DevSerSendSecret(devPupKey,codeHash,secret) @ #i
-      & SecWorldSentCode(deviceID,codeHash,secret) @ #j
-      & not(Ex #k devPupKeyLocal. DevComprimsed(devPupKeyLocal) @#k & devPupKeyLocal=devPupKey)
-        ==> (Ex #l IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #l & #l < #j)"
-
-lemma secretLeakedIfEntitiesComprimsed:
-  " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
-      DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
-      & InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #j
-      & KU(secret) @ #k
-        ==> 
-          ( Ex #a. VenderComprimsed(venderPubKey) @ #a & #i < #j & #i < #a & #a < #k) 
-        | ( Ex #b. DevComprimsed(devPupKey) @ #b       & #i < #j & #i < #b & #b < #k) 
-        | ( Ex #c. SecWorldComprimsed(IMEI) @ #c       & #i < #j & #j < #c & #c < #k) 
-  "
 end
