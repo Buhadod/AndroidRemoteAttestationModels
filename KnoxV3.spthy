@@ -31,7 +31,7 @@ rule CreateVender:
   ]
   --[ ]->
   [
-    !VenderKeys(~venderPrivKey),
+    !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
     !VenderInfo(pk(~venderPrivKey))
   ]
 
@@ -52,7 +52,7 @@ rule CreateDevice:
   --[ ]->
   [
     !SecureWorldInfo(~deviceID,venderPubKey,~secWorldSignKey),
-    !VenderDevicesInfo(venderPrivKey, venderSignKey, ~secWorldSignKey, ~deviceID) 
+    !VenderDevicesInfo(venderPrivKey, ~secWorldSignKey, ~deviceID) 
   ]
 
 rule SecWorldComprimse:
@@ -66,22 +66,22 @@ rule SecWorldComprimse:
 
   rule CreateDeveloper:
   [ 
-    Fr(~apiKey), Fr(~auk)
+    Fr(~apiKey), Fr(~auk), 
     !VenderInfo(venderPupKey)
   ]
   --[ ]->
   [
     !DeveloperInfo(venderPupKey, ~apiKey, ~auk),
-    !VenderInfo(venderPupKey, ~apiKey, ~auk)
+    !VenderDeveloperInfo(venderPupKey, ~apiKey, ~auk)
   ]
 
 rule DevComprimse:
   [ 
-    !DeveloperInfo(secret)
+    !DeveloperInfo(venderPupKey, apiKey, auk)
   ]
-  --[ DevComprimsed(secret) ]->
+  --[ DevComprimsed(apiKey, auk) ]->
   [
-    Out(<secret>)
+     Out(<apiKey, auk>)
   ]
 
 
@@ -92,92 +92,88 @@ rule DevComprimse:
   ]
   --[ ]->
   [
-    !AppInfo(~appSHA, ~secret, apiKey, auk)
+    !AppSecret(~appSHA, ~secret, apiKey, auk), 
+    !AppInfo(~appSHA, apiKey, auk)
   ]
 
 /* Installation rules*/
 
-rule Install_App_in_Device
+rule Install_App_in_Device:
   [
-    !AppInfo(appSHA,secret, apiKey, auk),
+    !AppInfo(appSHA, apiKey, auk),
     !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
   ]
-  --[ Install_App_in_Device(appSHA,secret, apiKey, auk, deviceID)]->
+  --[ Install_App_in_Device(appSHA, apiKey, auk, deviceID)]->
   [
-      !AppInfo(appSHA, apiKey, deviceID)
+    !AppInstallation(appSHA, apiKey, auk, deviceID)
   ]
 
 /* Protocol rules*/
 rule Dev_to_Ven_1:
     [
       Fr(~arid),
-      !DeveloperInfo(apiKey,auk)
+      !DeveloperInfo(venderPupKey, apiKey, auk)
     ]
   --[ 
-       St_Developer_to_Vendor(~arid,apiKey, auk)
+       St_Developer_to_Vendor_1(~arid,apiKey, auk)
     ]->
     [ 
-      Out( <~arid, apiKey> ),
-      !Developer_to_Vender(~arid, apiKey, auk)
+      Out( <~arid, apiKey> )
     ]
 
 rule Ven_to_Dev_2:
     [
       In(<arid, apiKey>),
       Fr(~nv),
-      !VenderInfo(apiKey, auk)
+      !VenderDeveloperInfo(venderPupKey, apiKey, auk)
     ]
   --[ 
-       St_Vendor_to_Developer(~nv, arid, apiKey, auk)
+       St_Vendor_to_Developer_2(~nv, arid, apiKey, auk)
     ]->
     [ 
-      Out( <~nv, apiKey> ),
-      !Vendor_to_Developer(~nv, arid, apiKey, auk)
+      Out( <~nv, arid, apiKey> )
     ]
 
 rule Dev_to_App_3:
     [
-      In(<nv, apiKey>),
-      !DeveloperInfo(apiKey,auk),
-      !Developer_to_Vender(arid, apiKey, auk)
+      In(<nv, arid, apiKey>),
+      !DeveloperInfo(venderPupKey,apiKey, auk)
     ]
   --[ 
-      St_Developer_to_App(nv, arid, apiKey, auk)
+      St_Developer_to_App_3(nv, arid, apiKey, auk)
     ]->
     [ 
-      Out( <nv, arid, apiKey, auk> ),
-      !Developer_to_App(nv, arid, apiKey, auk)
+      Out( <nv, arid, apiKey, auk> )
     ]
 
 rule App_to_SecWorld_4:
     [
       In(<nv, arid, apiKey, auk>),
-      !AppInfo(appSHA, apiKey, deviceID)
+      !AppInstallation(appSHA, apiKey, auk, deviceID)
     ]
   --[ 
-      St_App_to_SecWorld(nv, arid, apiKey, auk, appSHA, deviceID)
+      St_App_to_SecWorld_4(nv, arid, apiKey, auk, appSHA, deviceID)
     ]->
     [ 
-      !Out_App_to_SecWorld(nv, auk, appSHA, deviceID),
-      !App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
+      !Secure_Channel_App_to_SecWorld(nv, auk, appSHA, deviceID),
+      !App_to_SecWorld_4(nv, arid, apiKey, auk)
     ]
 
 rule SecWorld_to_Ven_5:
     
-    let blob = aenc(sign (<'NotRooted',nv, deviceID, appSHA>,secWorldSignKey, ), venderPubKey)
+    let blob = aenc(sign (<'NotRooted',nv, deviceID, appSHA>,secWorldSignKey), venderPubKey)
 
     in
     [
       !AppInfo(appSHA, apiKey, auk),
-      !Out_App_to_SecWorld(nv, auk),
+      !Secure_Channel_App_to_SecWorld(nv, auk, appSHA, deviceID),
       !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
     ]
   --[ 
-      St_SecWorld_to_App(blob)
+      St_SecWorld_to_App_5(blob)
     ]->
     [ 
-      Out(<blob,auk>),
-      !SecWorld_to_Ven(nv, deviceID, auk)
+      Out(<blob,auk>)
     ]
 
 rule Ven_to_SecWorld_6:
@@ -189,14 +185,14 @@ rule Ven_to_SecWorld_6:
       In(<blob, auk>),
       Fr(~uid),
       !VenderKeys(venderPrivKey, venderPubKey),
-      !VenderDevicesInfo(venderPrivKey, venderSignKey, secWorldSignKey, deviceID) 
+      !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID) 
     ]
   --[ 
-      St_Ven_to_SecWorld('NotRooted', nv, deviceID, appSHA, ~uid)
+      St_Ven_to_SecWorld_6('NotRooted', nv, deviceID, appSHA, ~uid)
     ]->
     [ 
       Out(<~uid,auk>),
-      !Ven_to_SecWorld('NotRooted', nv, deviceID, appSHA, ~uid, auk)
+      !VenderStatment('NotRooted', nv, deviceID, appSHA, ~uid)
     ]
 
 
@@ -204,53 +200,49 @@ rule SecWorld_to_App_7:
     [
       In(<uid,auk>),
       !AppInfo(appSHA, apiKey, auk),
-      !SecWorld_to_Ven(nv, deviceID, auk),
       !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
     ]
   --[ 
-      St_SecWorld_to_App(nv, apiKey, auk, appSHA)
+      St_SecWorld_to_App_7(apiKey, auk, appSHA)
     ]->
     [ 
-      !Out_SecWorld_to_App(uid,auk, appSHA),
-      !SecWorld_to_App( apiKey, auk, appSHA)
+      !Secure_Channel_SecWorld_to_App(uid,auk, appSHA)
     ]
 
 rule App_to_Dev_8:
     [
-      !Out_SecWorld_to_App(uid,auk, appSHA),
-      !App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
+      !Secure_Channel_SecWorld_to_App(uid,auk, appSHA),
+      !AppInstallation(appSHA, apiKey, auk, deviceID),
+      !App_to_SecWorld_4(nv, arid, apiKey, auk)
     ]
   --[ 
-      St_App_to_Dev(uid,nv, arid, apiKey, auk, appSHA)
+      St_App_to_Dev_8(uid,nv, arid, apiKey, auk, appSHA)
     ]->
     [ 
-      Out(<uid, nv, arid, apiKey>),
-      !App_to_Dev(uid, nv, arid, apiKey)
+      Out(<uid, nv, arid, apiKey>)
     ]
 
 rule Dev_to_Ven_9:
     [
-      In(<uid, nv, arid, apiKey>),
-      !Developer_to_App(nv, arid, apiKey, auk)
+      In(<uid, nv, arid, apiKey>)
     ]
   --[ 
-      St_App_to_Dev(uid, nv, arid, apiKey)
+      St_App_to_Dev_9(uid, nv, arid, apiKey)
     ]->
     [ 
-      Out(<uid, nv, arid, apiKey>),
-      !Dev_to_Ven(uid, nv, arid, apiKey)
+      Out(<uid, nv, arid, apiKey>)
     ]
 
 rule Ven_to_Dev_10:
     [
       In(<uid, nv, arid, apiKey>),
-      !Vendor_to_Developer(~nv),
       !VenderKeys(venderPrivKey, venderPubKey),
-      !VenderDevicesInfo(venderPrivKey, venderSignKey, secWorldSignKey, deviceID),
-      !Ven_to_SecWorld('NotRooted', nv, deviceID, appSHA, uid, auk)
+      !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID),
+      !VenderDeveloperInfo(venderPubKey, apiKey, auk),
+      !VenderStatment('NotRooted', nv, deviceID, appSHA, uid)
     ]
   --[ 
-      St_Ven_to_Dev('NotRooted', nv, deviceID, appSHA, uid,arid, auk)
+      St_Ven_to_Dev_10('NotRooted', nv, deviceID, appSHA, uid,arid, auk)
     ]->
     [ 
       Out(<'NotRooted', nv, deviceID, appSHA, uid, arid, auk, apiKey>)
@@ -259,13 +251,11 @@ rule Ven_to_Dev_10:
 rule Dev_to_App_11:
     [
       In(<'NotRooted', nv, deviceID, appSHA, uid, arid, auk, apiKey>),
-      !Developer_to_App(nv, arid, apiKey, auk),
-      !Dev_to_Ven(uid, nv, arid, apiKey),
-      !AppInfo(appSHA,secret, apiKey, auk),
+      !AppSecret(appSHA,secret, apiKey, auk),
       !DeveloperInfo(venderPupKey,apiKey, auk)
     ]
   --[ 
-      St_Dev_to_App(nv, uid, arid, auk, apiKey, secret)
+      St_Dev_to_App_11(nv, uid, arid, auk, apiKey, secret)
     ]->
     [ 
       Out(<secret>)
@@ -274,6 +264,6 @@ rule Dev_to_App_11:
 lemma executable:
   exists-trace 
   " Ex #i nv uid arid auk apiKey secret.
-      St_Dev_to_App(nv, uid, arid, auk, apiKey, secret) @ i "
+      St_Dev_to_App_11(nv, uid, arid, auk, apiKey, secret) @ i "
 
 end

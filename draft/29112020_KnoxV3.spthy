@@ -27,12 +27,12 @@ builtins: asymmetric-encryption, signing
 /* Set up rules */
 rule CreateVender:
   [ 
-    Fr(~venderPrivKey)
+    Fr(~venderPrivKey),Fr(~apiKey), Fr(~auk)
   ]
   --[ ]->
   [
-    !VenderKeys(~venderPrivKey),
-    !VenderInfo(pk(~venderPrivKey))
+    !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
+    !VenderInfo(~apiKey, ~auk)
   ]
 
 rule VenderComprimse:
@@ -66,13 +66,13 @@ rule SecWorldComprimse:
 
   rule CreateDeveloper:
   [ 
-    Fr(~apiKey), Fr(~auk)
-    !VenderInfo(venderPupKey)
+    Fr(~secret),
+    !VenderInfo(apiKey, auk)
   ]
   --[ ]->
   [
-    !DeveloperInfo(venderPupKey, ~apiKey, ~auk),
-    !VenderInfo(venderPupKey, ~apiKey, ~auk)
+    !DeveloperSecret(~secret),
+    !DeveloperInfo(apiKey, auk)
   ]
 
 rule DevComprimse:
@@ -87,25 +87,15 @@ rule DevComprimse:
 
   rule CreateApp:
   [
-    Fr(~appSHA), Fr(~secret),
-    !DeveloperInfo(venderPupKey,apiKey, auk)
+    Fr(~appSHA),
+    !DeveloperInfo(apiKey, auk)
   ]
   --[ ]->
   [
-    !AppInfo(~appSHA, ~secret, apiKey, auk)
+    !AppInfo(~appSHA, apiKey, auk)
   ]
 
-/* Installation rules*/
 
-rule Install_App_in_Device
-  [
-    !AppInfo(appSHA,secret, apiKey, auk),
-    !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
-  ]
-  --[ Install_App_in_Device(appSHA,secret, apiKey, auk, deviceID)]->
-  [
-      !AppInfo(appSHA, apiKey, deviceID)
-  ]
 
 /* Protocol rules*/
 rule Dev_to_Ven_1:
@@ -152,13 +142,13 @@ rule Dev_to_App_3:
 rule App_to_SecWorld_4:
     [
       In(<nv, arid, apiKey, auk>),
-      !AppInfo(appSHA, apiKey, deviceID)
+      !AppInfo(appSHA, apiKey, auk)
     ]
   --[ 
-      St_App_to_SecWorld(nv, arid, apiKey, auk, appSHA, deviceID)
+      St_App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
     ]->
     [ 
-      !Out_App_to_SecWorld(nv, auk, appSHA, deviceID),
+      !Out_App_to_SecWorld(nv, auk, appSHA),
       !App_to_SecWorld(nv, arid, apiKey, auk, appSHA)
     ]
 
@@ -261,8 +251,8 @@ rule Dev_to_App_11:
       In(<'NotRooted', nv, deviceID, appSHA, uid, arid, auk, apiKey>),
       !Developer_to_App(nv, arid, apiKey, auk),
       !Dev_to_Ven(uid, nv, arid, apiKey),
-      !AppInfo(appSHA,secret, apiKey, auk),
-      !DeveloperInfo(venderPupKey,apiKey, auk)
+      !DeveloperInfo(apiKey,auk),
+      !DeveloperSecret(secret)
     ]
   --[ 
       St_Dev_to_App(nv, uid, arid, auk, apiKey, secret)
@@ -271,9 +261,33 @@ rule Dev_to_App_11:
       Out(<secret>)
     ]
 
-lemma executable:
-  exists-trace 
-  " Ex #i nv uid arid auk apiKey secret.
-      St_Dev_to_App(nv, uid, arid, auk, apiKey, secret) @ i "
 
+lemma types [sources]:
+" All IMEI nd codeHash sessionPubKey blob #i.
+    VenderChecked(IMEI, nd, codeHash, sessionPubKey, blob) @i
+    ==>   ( Ex #j. AppSend(blob) @ j & #j < #i) 
+        | ( Ex #k. KU(<IMEI, nd, codeHash, sessionPubKey>) @ k & #k < #i)"
+
+lemma testTrace:
+  exists-trace 
+  " Ex #i deviceID codeHash secret.
+      SecWorldSentCode(deviceID,codeHash,secret) @ i "
+
+lemma onlyTrustedAppsCanGetSecret:
+  " All deviceID codeHash secret #i #j devPupKey.
+      DevSerSendSecret(devPupKey,codeHash,secret) @ #i
+      & SecWorldSentCode(deviceID,codeHash,secret) @ #j
+      & not(Ex #k devPupKeyLocal. DevComprimsed(devPupKeyLocal) @#k & devPupKeyLocal=devPupKey)
+        ==> (Ex #l IMEI. InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #l & #l < #j)"
+
+lemma secretLeakedIfEntitiesComprimsed:
+  " All codeHash secret devPupKey devVerifyKey devSignKey venderPubKey venderVerifyKey IMEI deviceID #i #j #k.
+      DevCreateApp(codeHash, secret,devPupKey, devVerifyKey, devSignKey, venderPubKey, venderVerifyKey) @ #i
+      & InstallAppInDevice(codeHash,secret,IMEI,deviceID,devPupKey) @ #j
+      & KU(secret) @ #k
+        ==> 
+          ( Ex #a. VenderComprimsed(venderPubKey) @ #a & #i < #j & #i < #a & #a < #k) 
+        | ( Ex #b. DevComprimsed(devPupKey) @ #b       & #i < #j & #i < #b & #b < #k) 
+        | ( Ex #c. SecWorldComprimsed(IMEI) @ #c       & #i < #j & #j < #c & #c < #k) 
+  "
 end
