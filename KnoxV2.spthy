@@ -5,13 +5,13 @@ builtins: asymmetric-encryption, signing
 
 /* We formalize the following protocol
 
-    1. Vender -> Developer   : N_v
-    2. Developer -> App      : N_v
+    1. Vender -> Developer   : N_v, apikey
+    2. Developer -> App      : N_v, apikey
     3. App -> SecWorld       : N_v
-    4. SecWorld -> App       : Stmt = <N_s, measurement, deviceID>, E_venderPubKey(Sign_secWorldSignKey(Stmt),Stmt) i.e (blob)
+    4. SecWorld -> App       : statement = <N_s, measurement, deviceID>, E_venderPubKey(Sign_secWorldSignKey(Stmt),Stmt) i.e (blob)
     5. App -> Developer      : blob, N_s, apikey
-    6. Developer -> Vender   : blob, N_s
-    7. Vender -> Developer   : stmt
+    6. Developer -> Vender   : blob, N_s, apikey
+    7. Vender -> Developer   : statement
     8. Developer -> App      : secret
 */
 
