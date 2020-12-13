@@ -1,0 +1,222 @@
+theory KnoxV2
+begin
+
+builtins: asymmetric-encryption, signing
+
+/* We formalize the following protocol
+
+    1. Vender -> Developer   : N_v, apikey
+    2. Developer -> App      : N_v, apikey
+    3. App -> SecWorld       : N_v
+    4. SecWorld -> App       : statement = <N_s, measurement, deviceID>, E_venderPubKey(Sign_secWorldSignKey(Stmt),Stmt) i.e (blob)
+    5. App -> Developer      : blob, N_s, apikey
+    6. Developer -> Vender   : blob, N_s, apikey
+    7. Vender -> Developer   : statement
+    8. Developer -> App      : secret
+*/
+
+/*
+  Assumiption:
+  
+
+*/
+
+/* Set up rules */
+rule CreateVender:
+  [ 
+    Fr(~venderPrivKey)
+  ]
+  --[ ]->
+  [
+    !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
+    !VenderInfo(pk(~venderPrivKey))
+  ]
+
+rule VenderComprimse:
+  [ 
+    !VenderKeys(venderPrivKey, venderPubKey)
+  ]
+  --[ VenderComprimsed(venderPubKey) ]->
+  [
+    Out(<venderPrivKey, venderPubKey>)
+  ]
+
+rule CreateDevice:
+  [ 
+    Fr(~deviceID), Fr(~secWorldSignKey),
+    !VenderKeys(venderPrivKey, venderPubKey)
+  ]
+  --[ ]->
+  [
+    !SecureWorldInfo(~deviceID,venderPubKey,~secWorldSignKey),
+    !VenderDevicesInfo(venderPrivKey, ~secWorldSignKey, ~deviceID) 
+  ]
+
+rule SecWorldComprimse:
+  [ 
+    !SecureWorldInfo(deviceID,venderPubKey,~secWorldSignKey)
+  ]
+  --[ SecWorldComprimsed(deviceID) ]->
+  [
+    Out(<deviceID>)
+  ]
+
+  rule CreateDeveloper:
+  [ 
+    Fr(~apiKey),
+    !VenderInfo(venderPupKey)
+  ]
+  --[ ]->
+  [
+    !DeveloperInfo(venderPupKey, ~apiKey), 
+    !VenderDeveloperInfo(venderPupKey, ~apiKey)
+  ]
+
+rule DevComprimse:
+  [ 
+    !DeveloperInfo(venderPupKey, apiKey)
+  ]
+  --[ DevComprimsed(apiKey) ]->
+  [
+     Out(<apiKey>)
+  ]
+
+
+  rule CreateApp:
+  [
+    Fr(~appSHA), Fr(~secret),
+    !DeveloperInfo(venderPupKey, apiKey)
+  ]
+  --[ ]->
+  [
+    !AppInfo(~appSHA,~secret, apiKey)
+  ]
+
+/* Installation rules*/
+
+rule Install_App_in_Device:
+  [
+    !AppInfo(appSHA,secret, apiKey),
+    !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
+  ]
+  --[ Install_App_in_Device(appSHA,secret, apiKey, deviceID)]->
+  [
+      !AppInfo(appSHA, apiKey, deviceID)
+  ]
+
+
+/* Protocol rules*/
+rule Ven_to_Dev_1:
+    [
+      Fr(~nv),
+      !VenderDeveloperInfo(venderPupKey, apiKey)
+    ]
+  --[ 
+       St_Vendor_to_Developer_1(~nv, apiKey)
+    ]->
+    [ 
+      Out( <~nv, apiKey> )
+    ]
+
+rule Dev_to_App_2:
+    [
+      In(<nv, apiKey>),
+      !DeveloperInfo(venderPupKey, apiKey)
+    ]
+  --[ 
+      St_Developer_to_App_2(nv, apiKey)
+    ]->
+    [ 
+      Out( <nv,apiKey> )
+    ]
+
+rule App_to_SecWorld_3:
+    [
+      In(<nv,apiKey>),
+      !AppInfo(appSHA, apiKey, deviceID)
+    ]
+  --[ 
+      St_App_to_SecWorld_3(nv, appSHA, apiKey, deviceID)
+    ]->
+    [ 
+      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID)
+    ]
+
+rule SecWorld_to_App_4:
+    
+    let blob = aenc(sign (<'NotRooted',nv, deviceID>,secWorldSignKey), venderPubKey)
+
+    in
+    [
+      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
+      !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
+    ]
+  --[ 
+      St_SecWorld_to_App_4(blob)
+    ]->
+    [ 
+      !SecWorld_to_App(blob)
+    ]
+
+rule App_to_Dev_5:
+    [
+      !SecWorld_to_App(blob),
+      !AppInfo_2(nv, appSHA, apiKey)
+    ]
+  --[ 
+      St_App_to_Dev_5(nv, blob, appSHA,apiKey)
+    ]->
+    [ 
+      Out(<blob, nv, apiKey>)
+    ]
+
+rule Dev_to_Ven_6:
+    [
+      In(<blob, nv, apiKey>),
+      !Developer_to_App(nv,apiKey)
+    ]
+  --[ 
+      St_App_to_Dev_6(nv, blob,apiKey)
+    ]->
+    [ 
+      Out(<blob, nv, apiKey>)
+    ]
+
+rule Ven_to_Dev_7:
+    
+    let blob = aenc(sign (<'NotRooted',nv, deviceID>,secWorldSignKey), venderPubKey)
+
+    in
+    [
+      In(<blob, nv, apiKey>),
+      !VenderDeveloperInfo(venderPubKey, apiKey),
+      !VenderKeys(venderPrivKey, venderPubKey),
+      !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID) 
+    ]
+  --[ 
+      St_Ven_to_Dev_7('NotRooted',blob, nv, deviceID)
+    ]->
+    [ 
+      Out(<'NotRooted',nv, deviceID, apiKey>)
+    ]
+
+rule Dev_to_App_8:
+    [
+      In(<'NotRooted',nv, deviceID, apiKey>),
+      !AppInfo(appSHA,secret, apiKey),
+      !DeveloperInfo(venderPupKey, apiKey)
+    ]
+  --[ 
+      St_Dev_to_App_8(nv, apiKey, secret)
+    ]->
+    [ 
+      Out(<secret,apiKey>)
+    ]
+
+
+lemma executable:
+  exists-trace 
+  " Ex #i nv apiKey secret.
+      St_Dev_to_App_8(nv, apiKey, secret) @ i "
+
+end
