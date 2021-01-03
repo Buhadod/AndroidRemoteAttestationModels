@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 theory KnoxV2_TLS_slice
+=======
+theory KnoxV2_TLS
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
 begin
 
 builtins: asymmetric-encryption, signing, hashing, symmetric-encryption
@@ -135,6 +139,7 @@ rule Install_Repacked_App_in_Device:
 /* Protocol rules*/
 rule App_to_Dev_1:
     [ 
+<<<<<<< HEAD
       Fr(~kd) , !Pk($D, pkD),  // Create Session key ~k with Server $S
       !AppInfoInDevice(appSHA, apiKey, deviceID)
     ]      
@@ -143,10 +148,18 @@ rule App_to_Dev_1:
   ]->
     [ 
       Client_1_App_to_Dev_1( $D, ~kd ) , Out( aenc(<~kd,apiKey>, pkD) ) // send the session key ~k to Server $S
+=======
+      Fr(~kd) , !Pk($D, pkD)  // Create Session key ~k with Server $S
+    ]      
+  -->
+    [ 
+      Client_1_App_to_Dev_1( $D, ~kd ) , Out( aenc(~kd, pkD) ) // send the session key ~k to Server $S
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ] 
 
 rule Dev_to_Ven_2:
     let
+<<<<<<< HEAD
       request = aenc(<kd,apiKey>, pk(~ltkD))      
     in
     [ 
@@ -161,12 +174,28 @@ rule Dev_to_Ven_2:
     [ 
       Server_1_App_to_Dev_1($D, kd),    // Save the session key
       Client_1_Dev_to_Ven_2($V, ~kv ) , Out( aenc(<~kv,apiKey>, pkV) ) // send the session key ~kv to Server $V
+=======
+      request = aenc(kd, pk(~ltkD))      
+    in
+    [ 
+      !Ltk($D, ~ltkD)  , In( request ),  // recieve a request from the client as Server $S
+       Fr(~kv) , !Pk($V, pkV)            // create Session key ~kv with Server $V
+    ]      
+  --[ AnswerRequest($D, kd) ]->           
+    [ 
+      Server_1_App_to_Dev_1($D, kd),    // Save the session key
+      Client_1_Dev_to_Ven_2($V, ~kv ) , Out( aenc(~kv, pkV) ) // send the session key ~kv to Server $V
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
 
     ]         
 
 rule Ven_to_Dev_3:
     let
+<<<<<<< HEAD
       request = aenc(<kv,apiKey>, pk(~ltkV))      
+=======
+      request = aenc(kv, pk(~ltkV))      
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     in
     [ 
       !Ltk($V, ~ltkV) , In( request ),  // recieve a request from the client as Server $S
@@ -174,12 +203,20 @@ rule Ven_to_Dev_3:
       !VenderDeveloperInfo(venderPupKey, apiKey)
     ]
   --[ 
+<<<<<<< HEAD
       St_Vendor_to_Developer_3(~nv, apiKey, $V, kv),
       AnswerRequest($V, kv) 
     ]->
     [ 
       Ft_Vendor_to_Developer_3(~nv, apiKey),
       Out( senc(<~nv, apiKey>,kv) )
+=======
+       St_Vendor_to_Developer_3(~nv, apiKey),
+       AnswerRequest($V, kv) 
+    ]->
+    [ 
+      Out( <senc(<~nv, apiKey>,kv)> )
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
 
 rule Dev_to_App_4:
@@ -187,8 +224,12 @@ rule Dev_to_App_4:
       response = senc(<nv, apiKey>,kv)
     in
     [  
+<<<<<<< HEAD
       In( response ),
       Client_1_Dev_to_Ven_2(V, kv), 
+=======
+      Client_1_Dev_to_Ven_2(V, kv ) , In( response ),
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
       Server_1_App_to_Dev_1(D, kd),
       !DeveloperInfo(venderPupKey, apiKey)
     ]
@@ -197,7 +238,11 @@ rule Dev_to_App_4:
     ]->
     [ 
       Out( senc(<nv, apiKey>,kd) ),
+<<<<<<< HEAD
       Ft_Dev_to_App_4(nv,apiKey)
+=======
+      Developer_to_App(nv,apiKey)
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
 
 rule App_to_SecWorld_5:
@@ -212,8 +257,13 @@ rule App_to_SecWorld_5:
       St_App_to_SecWorld_5(nv, appSHA, apiKey, deviceID, D, kd), SessKeyC( D, kd )
     ]->
     [ 
+<<<<<<< HEAD
       Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
       Ft_App_to_SecWorld_5(nv, appSHA, apiKey)
+=======
+      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
+      AppInfo_2(nv, appSHA, apiKey)
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
 
 rule SecWorld_to_App_6:
@@ -222,21 +272,34 @@ rule SecWorld_to_App_6:
 
     in
     [
+<<<<<<< HEAD
       Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
+=======
+      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
       !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
     ]
   --[ 
       St_SecWorld_to_App_6(blob, nv, appSHA, deviceID)
     ]->
     [ 
+<<<<<<< HEAD
       SecWorld_to_App(blob)
+=======
+      !SecWorld_to_App(blob)
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
 
 rule App_to_Dev_7:
     [
       Fr(~kd) , !Pk($D, pkD),  // Create Session key ~kd with Server $D
+<<<<<<< HEAD
       SecWorld_to_App(blob),
       Ft_App_to_SecWorld_5(nv, appSHA, apiKey)
+=======
+      !SecWorld_to_App(blob),
+      AppInfo_2(nv, appSHA, apiKey)
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
   --[ 
       St_App_to_Dev_7(nv, blob, appSHA,apiKey, $D, ~kd)
@@ -250,16 +313,26 @@ rule Dev_to_Ven_8:
       request = aenc(<kd,blob, nv, apiKey>, pk(~ltkD))      
     in
     [ 
+<<<<<<< HEAD
       !Ltk($D, ~ltkD)  , In( request ),   // recieve a request from the client as Server $S
        Fr(~kv) , !Pk($V, pkV),            // create Session key ~kv with Server $V
        Ft_Dev_to_App_4(nv,apiKey)
+=======
+      !Ltk($D, ~ltkD)  , In( request ),  // recieve a request from the client as Server $S
+       Fr(~kv) , !Pk($V, pkV),            // create Session key ~kv with Server $V
+       Developer_to_App(nv,apiKey)
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
   --[ 
       St_App_to_Dev_8(nv, blob, apiKey, $D, kd), AnswerRequest($D, kd)
     ]->
     [ 
       Server_1_App_to_Dev_7($D, kd),    // Save the session key
+<<<<<<< HEAD
       Client_1_Dev_to_Ven_8($V, ~kv ) //, Out( aenc(<~kv,blob, nv, apiKey>, pkV) ) // send the session key ~kv to Server $V
+=======
+      Client_1_Dev_to_Ven_8($V, ~kv ) , Out( aenc(<~kv,blob, nv, apiKey>, pkV) ) // send the session key ~kv to Server $V
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
 
 rule Ven_to_Dev_9:
@@ -274,8 +347,12 @@ rule Ven_to_Dev_9:
       !Ltk($V, ~ltkV) , In( request ),
       !VenderDeveloperInfo(venderPubKey, apiKey),
       !VenderKeys(venderPrivKey, venderPubKey),
+<<<<<<< HEAD
       !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID),
       Ft_Vendor_to_Developer_3(nv, apiKey)
+=======
+      !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID) 
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
     ]
   --[ 
       St_Ven_to_Dev_9('NotRooted',blob, nv, deviceID), AnswerRequest($V, kv) 
@@ -314,7 +391,11 @@ rule App_11:
     [
     ]
 
+<<<<<<< HEAD
 /*
+=======
+
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
 lemma types [sources]:
   " (All nv apiKey V kv #i .
       St_Developer_to_App_4(nv, apiKey, V, kv) @ i
@@ -323,12 +404,20 @@ lemma types [sources]:
         
     )
     "
+<<<<<<< HEAD
 */
 lemma executable:
   exists-trace 
   " Ex #i #j nv blob apiKey D kd appSHA.
        St_App_to_Dev_8(nv, blob, apiKey, D, kd) @ #i 
       & St_App_to_Dev_7(nv, blob, appSHA,apiKey, D, kd) @ #j
+=======
+lemma executable:
+  exists-trace 
+  " Ex #i #j nv apiKey secret blob deviceID.
+      St_Dev_to_App_10(nv, apiKey, secret) @ #i 
+      & St_Ven_to_Dev_9('NotRooted',blob, nv, deviceID) @ #j
+>>>>>>> 90fd45b0113567971ec52dc2685b1345096dd04d
       & j < i
       "
 
