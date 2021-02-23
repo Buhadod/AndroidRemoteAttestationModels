@@ -5,6 +5,8 @@
 	Sample message using SAPIC
 	
 
+	Note: The first two messages from the figure are skipped.
+	 
 	Protocol:
     1. AtServer -> DevServer   	: nonce, apikey
     2. DevServer -> App      	: nonce, apikey
