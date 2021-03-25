@@ -1,0 +1,92 @@
+theory KnoxV2_locations
+begin
+
+builtins:
+	symmetric-encryption,
+	multiset,
+	hashing,
+	signing,
+	asymmetric-encryption,
+    locations-report
+    
+
+
+
+
+let Malware =
+                lock <'device', ~id>;
+                insert <'device', ~id>, 'rooted';
+                event MalwareInstalled();
+                unlock <'device',~id>;
+                0
+                
+
+
+let SecureWorld =
+    !(
+        in(nonce);
+        lock <'device', ~id>;
+        lookup <'device', ~id> as measurement in
+        let blob = report(<~id, measurement, nonce>) in
+        out (blob);
+        unlock <'device', ~id>;
+        0
+    )@<'TrustZone', ~id>
+ 
+
+let YourApp =
+    0
+
+let YourServer =
+    !(
+        //new ~tlsSessionKey;
+        //insert 'tlsSessionKey', ~tlsSessionKey;
+      
+        out(senc(~id, ~tlsSessionKey));
+        in(senc(nonce, ~tlsSessionKey));
+        out(nonce);
+        //receive report from TrustZone
+        //send report from TrustZone to attServer.
+        in(senc(veredict, ~tlsSessionKey));
+        if veredict = <~id, 'veredictOK'> then
+            event VeredictOK(~id);
+            0
+            
+        else
+            event VeredictNoOK(~id);
+            0
+    )
+
+let AttestServer =
+    !(
+        //lookup 'tlsSessionKey' as tlsSessionKey in
+        in(senc(~id, ~tlsSessionKey));        
+        new ~nonce;
+        out(senc(~nonce, ~tlsSessionKey));
+        in(blob);
+        if <~id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', ~id>) then
+            out(senc(<~id, 'veredictOK'>, ~tlsSessionKey))
+        else
+            out(senc(<~id, 'veredictNotOK'>, ~tlsSessionKey))        
+           
+    )
+
+
+new ~tlsSessionKey;
+new ~ssk_AttestServer;
+let spk_AttestServer = pk(~ssk_AttestServer) in
+out(spk_AttestServer);
+insert 'device', 'nonRooted';    
+new ~id;
+(SecureWorld | YourApp | YourServer | AttestServer)
+
+
+
+
+    
+    
+    
+    
+end
+
+
