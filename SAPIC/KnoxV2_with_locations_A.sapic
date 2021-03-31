@@ -1,0 +1,168 @@
+theory KnoxV2_locations
+begin
+
+builtins:
+	symmetric-encryption,
+	multiset,
+	hashing,
+	signing,
+	asymmetric-encryption,
+    locations-report
+    
+
+
+
+
+let RootedDevice =
+                lock <'device', ~id>;
+                insert <'device', ~id>, 'rooted';
+                event DeviceRooted(~id);
+                unlock <'device',~id>;
+                0
+
+let RepackedApp =
+    !(
+        new ~fakeAppPkg;
+        new ~fakeAppSignature;
+
+        lookup 'appPkg' as values in
+        let appPkg = fst(values) in
+        let appSignature = snd(values) in
+
+        //repacke app with different signature
+        insert 'appPkg',<appPkg,~fakeAppSignature>;
+        event DeveloperAppRepacked(appPkg,~fakeAppSignature);
+
+        //create a fake app
+        insert 'appPkg',<~fakeAppPkg,~fakeAppSignature>;
+        event DeveloperAppRepacked(~fakeAppPkg,~fakeAppSignature);
+        
+        0
+    )
+
+let YourAppSecureWorld =
+
+    !(
+        //Install app in device
+        lookup 'appPkg' as values in
+        let appPkg = fst(values) in
+        let appSignature = snd(values) in
+
+        //even app app installed in device 
+        event AppInstalled(~id,appPkg,appSignature);
+
+        //recive nonce
+        in(nonce);
+        
+        // calculate measurment
+        lock <'device', ~id>;
+        lookup <'device', ~id> as measurement in
+        let blob = report(<~id, measurement, nonce>) in
+        out(<blob,nonce>);
+        event AppSendBlob(~id,blob,nonce,appPkg,appSignature);
+        unlock <'device', ~id>;
+        
+        //App recvied secret
+        in(senc(secret,~tlsSessionKey));
+        event AppRecieveSecret(~id,blob,nonce,appPkg,appSignature,secret);
+        0
+
+    )@<'TrustZone', ~id>
+
+
+
+
+let YourServer =
+    !(
+        //new ~tlsSessionKey;
+        //insert 'tlsSessionKey', ~tlsSessionKey;
+        new ~appPkg;
+        new ~appSignature;
+
+        insert 'appPkg',<~appPkg,~appSignature>;
+        event DeveloperApp(~appPkg,~appSignature);
+        new ~secret;
+        
+        out(senc(~id, ~tlsSessionKey));
+        in(senc(nonce, ~tlsSessionKey));
+        out(nonce);
+        //receive report from TrustZone
+        //send report from TrustZone to attServer.
+        in(senc(veredict, ~tlsSessionKey));
+        if veredict = <~id, 'veredictOK'> then
+            event VeredictOK(~id);
+            out(senc(~secret,~tlsSessionKey));
+            0
+            
+        else
+            event VeredictNoOK(~id);
+            0
+    )
+
+let AttestServer =
+    !(
+        //lookup 'tlsSessionKey' as tlsSessionKey in
+        in(senc(~id, ~tlsSessionKey));        
+        new ~nonce;
+        out(senc(~nonce, ~tlsSessionKey));
+        in(<blob,~nonce>);
+        if <~id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', ~id>) then
+            out(senc(<~id, 'veredictOK'>, ~tlsSessionKey));
+            0
+            
+        else
+            out(senc(<~id, 'veredictNotOK'>, ~tlsSessionKey));
+            0    
+           
+    )
+
+
+new ~tlsSessionKey;
+//out(~tlsSessionKey);
+new ~ssk_AttestServer;
+let spk_AttestServer = pk(~ssk_AttestServer) in
+out(spk_AttestServer);
+insert 'device', 'nonRooted';    
+new ~id;
+(YourAppSecureWorld | YourServer | AttestServer | RootedDevice | RepackedApp)
+
+
+// Device recieve secret
+lemma Correctness:
+exists-trace
+	"Ex id blob nonce appPkg appSignature secret #i. AppRecieveSecret(id,blob,nonce,appPkg,appSignature,secret)@i"
+    
+
+// Developer App installed on the device
+lemma CorrectnessDeveloperAppInstalledInDevice:
+exists-trace
+	"Ex id appPkg appSignature #i #j. 
+        DeveloperApp(appPkg,appSignature) @i
+        & AppInstalled(id,appPkg,appSignature) @j
+        & #i < #j
+    "
+// Repacked or fake App installed on the device
+lemma CorrectnessRepackedAppInstalledInDevice:
+exists-trace
+	"Ex id appPkg appSignature fakeappSignature #i #j. 
+        DeveloperApp(appPkg,appSignature) @i
+        & AppInstalled(id,appPkg,fakeappSignature) @j
+//        & not(appSignature == fakeappSignature)
+        & #i < #j
+    "
+
+// Secret Leaked via repacked app regardless of device status (rooted or not).
+lemma SecretLeakedViaRepackedApp:
+exists-trace
+	"Ex id blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l.
+        DeveloperApp(appPkg,appSignature) @i 
+        & AppInstalled(id,appPkg,fakeappSignature) @j // or fakeAppPKG
+        & AppSendBlob(id,blob,nonce,appPkg,fakeappSignature) @k
+        & AppRecieveSecret(id, blob,nonce,appPkg,fakeappSignature,secret) @l
+        //& (appSignature !=  fakeappSignature)
+        & (#j < #i)"
+
+
+end
+
+
