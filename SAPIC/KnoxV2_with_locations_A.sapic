@@ -37,6 +37,12 @@ let RepackedApp =
         insert 'appPkg',<~fakeAppPkg,~fakeAppSignature>;
         event DeveloperAppRepacked(~fakeAppPkg,~fakeAppSignature);
         
+        in(<blob,nonce>);
+        out(<blob,nonce>);
+
+        // Repacked app send blob
+        event RepackedAppSendBlob(~id,blob,nonce,appPkg,~fakeAppSignature);
+        event RepackedAppSendBlob(~id,blob,nonce,~fakeAppPkg,~fakeAppSignature);
         0
     )
 
@@ -151,7 +157,7 @@ exists-trace
         & #i < #j
     "
 
-// Secret Leaked via repacked app regardless of device status (rooted or not).
+// App integrity : Secret Leaked via repacked app regardless of device status (rooted or not).
 lemma SecretLeakedViaRepackedApp:
 exists-trace
 	"Ex id blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l.
@@ -159,6 +165,18 @@ exists-trace
         & AppInstalled(id,appPkg,fakeappSignature) @j // or fakeAppPKG
         & AppSendBlob(id,blob,nonce,appPkg,fakeappSignature) @k
         & AppRecieveSecret(id, blob,nonce,appPkg,fakeappSignature,secret) @l
+        //& (appSignature !=  fakeappSignature)
+        & (#j < #i)"
+
+// Device integrity : Same as above, but we hvae two devices (rooted and unrooted).
+lemma SecretLeakedViaRepackedApp:
+exists-trace
+	"Ex id rootedId blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l #m.
+        DeveloperApp(appPkg,appSignature) @i 
+        & AppInstalled(id,appPkg,fakeappSignature) @j // or fakeAppPKG
+        & AppSendBlob(rootedId,blob,nonce,appPkg,fakeappSignature) @k
+        & AppRecieveSecret(rootedId, blob,nonce,appPkg,fakeappSignature,secret) @l
+        & DeviceRooted(rootedId) @m
         //& (appSignature !=  fakeappSignature)
         & (#j < #i)"
 
