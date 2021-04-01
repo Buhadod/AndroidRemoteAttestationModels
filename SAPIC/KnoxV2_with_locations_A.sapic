@@ -47,7 +47,6 @@ let RepackedApp =
     )
 
 let YourAppSecureWorld =
-
     !(
         //Install app in device
         lookup 'appPkg' as values in
@@ -169,7 +168,7 @@ exists-trace
         & (#j < #i)"
 
 // Device integrity : Same as above, but we hvae two devices (rooted and unrooted).
-lemma SecretLeakedViaRepackedApp:
+lemma SecretLeakedViaRepackedApp2:
 exists-trace
 	"Ex id rootedId blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l #m.
         DeveloperApp(appPkg,appSignature) @i 
