@@ -38,7 +38,7 @@ let RepackedApp =
         event DeveloperAppRepacked(~fakeAppPkg,~fakeAppSignature);
         
         in(<blob,nonce>);
-        out(<blob,nonce>);
+        //out(<blob,nonce>);
 
         // Repacked app send blob
         event RepackedAppSendBlob(~id,blob,nonce,appPkg,~fakeAppSignature);
@@ -84,9 +84,10 @@ let YourServer =
         new ~appPkg;
         new ~appSignature;
 
-        insert 'appPkg',<~appPkg,~appSignature>;
-        event DeveloperApp(~appPkg,~appSignature);
         new ~secret;
+        insert 'appPkg',<~appPkg,~appSignature>;
+        event DeveloperApp(~appPkg,~appSignature,~secret);
+        
         
         out(senc(~id, ~tlsSessionKey));
         in(senc(nonce, ~tlsSessionKey));
@@ -149,10 +150,11 @@ exists-trace
 // Repacked or fake App installed on the device
 lemma CorrectnessRepackedAppInstalledInDevice:
 exists-trace
-	"Ex id appPkg appSignature fakeappSignature #i #j. 
+	"Ex id appPkg appSignature fakeappSignature #i #j #k. 
         DeveloperApp(appPkg,appSignature) @i
         & AppInstalled(id,appPkg,fakeappSignature) @j
-//        & not(appSignature == fakeappSignature)
+        & not(appSignature = fakeappSignature)
+        & DeveloperAppRepacked(appPkg,fakeAppSignature) @k
         & #i < #j
     "
 
@@ -160,14 +162,15 @@ exists-trace
 lemma SecretLeakedViaRepackedApp:
 exists-trace
 	"Ex id blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l.
-        DeveloperApp(appPkg,appSignature) @i 
+        DeveloperApp(appPkg,appSignature,secret) @i 
         & AppInstalled(id,appPkg,fakeappSignature) @j // or fakeAppPKG
         & AppSendBlob(id,blob,nonce,appPkg,fakeappSignature) @k
-        & AppRecieveSecret(id, blob,nonce,appPkg,fakeappSignature,secret) @l
+            =>
+        AppRecieveSecret(id, blob,nonce,appPkg,fakeappSignature,secret) @l
         //& (appSignature !=  fakeappSignature)
         & (#j < #i)"
 
-// Device integrity : Same as above, but we hvae two devices (rooted and unrooted).
+// Device integrity : Same as above, but we have two devices (rooted and unrooted).
 lemma SecretLeakedViaRepackedApp2:
 exists-trace
 	"Ex id rootedId blob nonce appPkg appSignature fakeappSignature secret #i #j #k #l #m.
@@ -178,7 +181,6 @@ exists-trace
         & DeviceRooted(rootedId) @m
         //& (appSignature !=  fakeappSignature)
         & (#j < #i)"
-
 
 end
 
