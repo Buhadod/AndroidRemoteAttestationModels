@@ -56,9 +56,9 @@ let RepackedApp =
     
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
-    
+    event Debug2();
      
-    out(~deviceChannel, <~id, blob>);
+    out(~deviceChannel2, <~id, blob>);
     
     
     in(~deviceChannel, secret);
@@ -71,16 +71,15 @@ let YourApp =
     event YourAppStarts(~id);
     in(~deviceChannel, nonceA);
     
-    
     event ReceivedNonce(nonceA);
     out(nonceA);
     
 
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
+    event Debug1();
     
-    
-    out(~deviceChannel, <~id, blob>);
+    out(~deviceChannel2, <~id, blob>);
     
     
     in(~deviceChannel, secret);
@@ -105,13 +104,12 @@ let YourServer =
         out(~deviceChannel, nonce);
         
         
-        
-        in(~deviceChannel, <id, blob>);
+        in(~deviceChannel2, <id, blob>);
         event ReceivedBlob(blob);
+        
+        event Debug3();
 
         out(~serverChannel, <id, blob>);
-
-        
         
         in(~serverChannel, veredict);
 
@@ -133,7 +131,7 @@ let AttestServer =
         
         in(~serverChannel, <id, blob>);
         
-        event Debug1();
+        
         if <id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', id>) then
             event AttestServerVeredictOk(id);
             out(~serverChannel, <id, 'veredictOK'>)
@@ -147,6 +145,7 @@ let AttestServer =
 
 new ~serverChannel;
 new ~deviceChannel;
+new ~deviceChannel2;
 new ~secureChannel;
 //new ~ssk_AttestServer;
 //let spk_AttestServer = pk(~ssk_AttestServer) in
@@ -189,9 +188,9 @@ lemma types3 [sources]:
 
 
 
-lemma Debug1:
-    exists-trace
-    "Ex #i. Debug1()@i"
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex #i. Debug3()@i"
 
 
 
