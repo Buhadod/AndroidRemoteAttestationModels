@@ -19,8 +19,6 @@ let RootStatusManager =
 
 
 let PlayService =
-    
-    
     !(
         in(nonceSW);
        
@@ -105,8 +103,6 @@ let YourServer =
         
         in(~deviceChannel2, <id, blob>);
         //event ReceivedBlob(blob);     
-        
-
         
 
         out(~serverChannel2, <id, blob>);
