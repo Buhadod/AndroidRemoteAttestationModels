@@ -1,12 +1,7 @@
-theory KnoxV2_locations
+theory Safetynet
 begin
 
 builtins:
-	//symmetric-encryption,
-	//ultiset,
-	//hashing,
-	//signing,
-	//asymmetric-encryption,
     locations-report
     
 
@@ -23,78 +18,81 @@ let RootStatusManager =
   */              
 
 
-let SecureWorld =
+let PlayService =
     
     
     !(
         in(nonceSW);
-
-        (
-            lock <'device', ~id>;
-            lookup <'device', ~id> as measurement in
-            let blob = report(<~id, measurement, nonceSW>) in
-            
-            event ReceivedID(~id);
-            event GeneratedBlob(blob);
-            out (~secureChannel,<~id, blob>);
-           
-            unlock <'device', ~id>;
-            0
-        )@<'TrustZone', ~id>
+       
         
+        lock <'device', ~id>;
+        new ~blob;
+        out(~secureChannel,<~id, ~blob>);
+        unlock <'device', ~id>;
+        0
+       
+       
     )
  
 let RepackedApp =
     
-   
     event RepackedAppStarts(~id);
     in(~deviceChannel, nonceRA);
 
     event ReceivedNonce(nonceRA);
+    
     out(nonceRA);
     
+      
     
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
-    event Debug2();
-     
-    out(~deviceChannel, <~id, blob>);
-    
-    
-    in(~deviceChannel, secret);
-    event RepackedAppReceives(secret);
-    event Debug2();
-    0
+   
 
+    out(~deviceChannel2, <~id, blob>);
+    
+    
+    in(~deviceChannel3, secret);
+    event ReceivedSecret(secret);
+    event Debug3();
+    event RepackedAppReceives(secret);
+    
+    
+    0
+    /*0
+*/
 let YourApp =
     
     event YourAppStarts(~id);
-    in(~deviceChannel, nonceA);
-    
+    in(~deviceChannelA, nonceA);
+    event Debug2();
+    /*
     event ReceivedNonce(nonceA);
+
     out(nonceA);
     
-
+    
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
     
+    out(~deviceChannel2, <~id, blob>);
     
-    out(~deviceChannel, <~id, blob>);
-    event Debug1();
+    in(~deviceChannel3, secret);
     
-    in(~deviceChannel, secret);
-    event YourAppReceives(secret); 
-
+    event YourAppReceives(secret);
+    */
     0
+    /*
+*/
+    
 
 let Device =    
     new ~id;
     event GenerateID(~id);
-    //out(~id);
     insert <'device', ~id>, 'nonRooted';
-    (!SecureWorld | !(YourApp + RepackedApp))
-
-
+    (!PlayService| !RepackedApp )
+    
+    //out(~id);
 
 
 let YourServer =
@@ -102,24 +100,36 @@ let YourServer =
         in(~serverChannel, nonce);
 
         out(~deviceChannel, nonce);
+        //out(~deviceChannelA, nonce);
+    
         
+        in(~deviceChannel2, <id, blob>);
+        //event ReceivedBlob(blob);     
         
-        in(~deviceChannel, <id, blob>);
-        event ReceivedBlob(blob);
-        
-        event Debug3();
 
-        out(~serverChannel, <id, blob>);
         
-        in(~serverChannel, veredict);
 
+        out(~serverChannel2, <id, blob>);
+        //ok
+        
+        in(~serverChannel3, veredict);
+        
+        new ~secret;
+        event GeneratedSecret(~secret);
+        out(~deviceChannel3, ~secret);
+        
+        0
+        /*
         if veredict = <id, 'veredictOK'> then
             event VeredictOK(id);
             new ~secret;
             event YourServerSends(~secret);
-            out(~deviceChannel, ~secret)
+            out(~deviceChannel3, ~secret)
         else
             event VeredictNoOK(id)
+        
+    
+    */
     
     )
 
@@ -128,10 +138,14 @@ let AttestServer =
         new ~nonce;
         event GeneratedNonce(~nonce);
         out(~serverChannel, ~nonce);
+       
+        in(~serverChannel2, <id, blob>);
+       
         
-        in(~serverChannel, <id, blob>);
+        out(~serverChannel3, <id, 'veredictOK'>);
         
-        
+        0
+        /*
         if <id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', id>) then
             event AttestServerVeredictOk(id);
             out(~serverChannel, <id, 'veredictOK'>)
@@ -139,13 +153,21 @@ let AttestServer =
             event AttestServerVeredictNotOk(id);
             out(~serverChannel, <id, 'veredictNotOK'>)
         
-        
+        */
     )
 
 
 new ~serverChannel;
+new ~serverChannel2;
+new ~serverChannel3;
+
 new ~deviceChannel;
+new ~deviceChannel2;
+new ~deviceChannel3;
+
+
 new ~secureChannel;
+
 //new ~ssk_AttestServer;
 //let spk_AttestServer = pk(~ssk_AttestServer) in
 //out(spk_AttestServer);
@@ -162,6 +184,20 @@ lemma types [sources]:
                 | (Ex #j. GeneratedNonce( nonce ) @ j)
             )
     )"
+
+/*
+lemma typesSecret [sources]:
+    " 
+    (All secret #i.
+       ReceivedSecret(secret) @ i
+        ==>
+            ( 
+                (Ex #j. KU(secret) @ j & j < i)
+                | (Ex #j. GeneratedSecret(secret) @ j)
+            )
+    )"
+*/
+
     /*
 lemma types2 [sources]:
    "(All id #i.
@@ -187,9 +223,10 @@ lemma types3 [sources]:
 
 
 
-lemma Debug1: exists-trace "Ex #i. Debug1()@i"
-lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+//lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+//lemma Debug2: exists-trace "Ex #i. Debug2()@i"
 lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+//lemma Debug4: exists-trace "Ex #i. Debug4()@i"
 
 
 

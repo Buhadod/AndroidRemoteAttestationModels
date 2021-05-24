@@ -1,0 +1,82 @@
+
+theory TestLocation
+begin
+
+builtins:
+    locations-report
+
+let Enclave =
+    !(
+        in(nonceSW);
+        event Debug1();
+        event ReceivedNonce(nonceSW);
+        (
+            lock <'device', ~id>;
+            lookup <'device', ~id> as measurement in
+            let blob = report(<~id,measurement, nonceSW>) in
+            event Debug2();
+            new ~secret;
+            event GeneratedSecret(~id,~secret);
+            event GeneratedBlob( blob);
+            out(<~id,~secret,blob>);
+           
+            unlock <'device', ~id>;
+            0
+        )@<'TrustZone', ~id>
+        
+    )
+
+let Alice =
+    !(
+        new ~nonceA;
+        event GeneratedNonce( ~nonceA ); // nonce generated event for Alice
+        out(~nonceA);
+        //in(<~id, blob>);
+
+        in(<~id,secret,blob>);
+        event ReceivedBlob(blob);
+
+        event ReceivedSecret(~id,secret,blob);
+        event Debug3();
+        0
+    )
+
+
+
+new ~id;
+new ~tlsA;
+insert <'device', ~id>, 'nonRooted';
+
+(!Alice ||!Enclave)
+
+/*
+lemma types [sources]:
+    " 
+    (All nonce #i.
+       ReceivedNonce(nonce) @ i
+        ==>
+            ( 
+                (Ex #j. KU(nonce) @ j & j < i)
+                | (Ex #j. GeneratedNonce( nonce ) @ j)
+            )
+    )"
+    
+*/
+
+lemma types2 [sources]:
+    " 
+    (All blob #i.
+       ReceivedBlob( blob) @ i
+        ==>
+            ( 
+                (Ex #j. KU(blob) @ j & j < i)
+                | (Ex #j. GeneratedBlob( blob) @ j)
+            )
+    )"  
+
+
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+
+end
