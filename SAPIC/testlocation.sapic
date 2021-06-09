@@ -7,7 +7,7 @@ builtins:
 
 let Enclave =
     !(
-        in(nonceSW);
+        in(~id,nonceSW);
         event Debug1();
         event ReceivedNonce(nonceSW);
         (
@@ -16,9 +16,9 @@ let Enclave =
             let blob = report(<~id,'nonRooted', nonceSW>) in
             event Debug2();
             new ~secret;
-            event GeneratedSecret(~id,~secret);
-            event GeneratedBlob( blob);
-            out(<~id,blob>);
+            //event GeneratedSecret(~id,~secret);
+            //event GeneratedBlob( blob);
+            out(~id,<nonceSW,blob>);
            
             unlock <'device', ~id>;
             0
@@ -30,23 +30,29 @@ let Alice =
     !(
         new ~nonceA;
         event GeneratedNonce( ~nonceA ); // nonce generated event for Alice
-        out(~nonceA);
+        out(~id,~nonceA);
         //in(<~id, blob>);
 
-        in(<~id,blob>);
-        event ReceivedBlob(blob);
+        //in(<~id,blob>);
+        //event ReceivedBlob(blob);
         
-        if <~id, 'nonRooted', ~nonceA> = check_rep(blob, <'TrustZone', ~id>) then
-           event Debug3();
+        in(~id,<~nonceA,blob>);
+        event Debug3(~nonceA);
         0
+       /* if <~id, 'nonRooted', ~nonceA> = check_rep(blob, <'TrustZone', ~id>) then
+           event Debug3();
+        */
+        
+
     )
 
 
 
 new ~id;
+new ~key;
 insert <'device', ~id>, 'nonRooted';
 
-(!Alice ||!Enclave)
+(!Alice |!Enclave)
 
 /*
 lemma types [sources]:
@@ -74,8 +80,8 @@ lemma types2 [sources]:
     )"  
 
 */
-lemma Debug1: exists-trace "Ex #i. Debug1()@i"
-lemma Debug2: exists-trace "Ex #i. Debug2()@i"
-lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+//lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+//lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex nonceA #i. Debug3(nonceA)@i"
 
 end

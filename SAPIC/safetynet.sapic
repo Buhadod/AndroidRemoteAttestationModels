@@ -2,7 +2,9 @@ theory Safetynet
 begin
 
 builtins:
-    locations-report
+    locations-report,
+    symmetric-encryption
+
     
 
 
@@ -20,50 +22,53 @@ let RootStatusManager =
 
 let PlayService =
     !(
-        in(nonceSW);
-       
+        in(~secureChannel,nonceSW);
         
-        lock <'device', ~id>;
-        new ~blob;
-        out(~secureChannel,<~id, ~blob>);
-        unlock <'device', ~id>;
+        //lock <'device', ~id>;
+        //new ~blob;
+        let blob = senc(~key,nonceSW) in
+        out(~secureChannel,<~id, blob>);
+        //unlock <'device', ~id>;
         0
-       
        
     )
  
 let RepackedApp =
     
+    !(
     event RepackedAppStarts(~id);
     in(~deviceChannel, nonceRA);
 
+    event Debug1();
     event ReceivedNonce(nonceRA);
     
-    out(nonceRA);
     
-      
+    out(~secureChannel,nonceRA);
+
     
     in(~secureChannel,<~id, blob>);
-    event ReceivedBlob(blob);
-   
+    //event ReceivedBlob(blob);
+    event Debug2();
 
-    out(~deviceChannel2, <~id, blob>);
+    out(~deviceChannel, <~id, blob>);
     
     
     in(~deviceChannel3, secret);
+    
     event ReceivedSecret(secret);
-    event Debug3();
+    
     event RepackedAppReceives(secret);
     
     
     0
+    )
     /*0
 */
 let YourApp =
     
     event YourAppStarts(~id);
     in(~deviceChannelA, nonceA);
-    event Debug2();
+
     /*
     event ReceivedNonce(nonceA);
 
@@ -88,27 +93,28 @@ let Device =
     new ~id;
     event GenerateID(~id);
     insert <'device', ~id>, 'nonRooted';
-    (!PlayService| !RepackedApp )
+    (!PlayService| !RepackedApp)
     
     //out(~id);
 
 
 let YourServer =
     !(
-        in(~serverChannel, nonce);
+        in(~serverChannel, nonceS);
 
-        out(~deviceChannel, nonce);
+        out(~deviceChannel, nonceS);
         //out(~deviceChannelA, nonce);
     
         
-        in(~deviceChannel2, <id, blob>);
+        in(~deviceChannel, <id, blob>);
+        event Debug3();
         //event ReceivedBlob(blob);     
         
-
+        
         out(~serverChannel2, <id, blob>);
         //ok
         
-        in(~serverChannel3, veredict);
+        in(~serverChannel3, <id, verdict>);
         
         new ~secret;
         event GeneratedSecret(~secret);
@@ -123,7 +129,6 @@ let YourServer =
             out(~deviceChannel3, ~secret)
         else
             event VeredictNoOK(id)
-        
     
     */
     
@@ -135,11 +140,17 @@ let AttestServer =
         event GeneratedNonce(~nonce);
         out(~serverChannel, ~nonce);
        
-        in(~serverChannel2, <id, blob>);
-       
+        in(~serverChannel2, <id, senc(~key,~nonce)>);
+        
         
         out(~serverChannel3, <id, 'veredictOK'>);
+        /*
+        if <id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', id>) then
+        */
         
+        
+        
+
         0
         /*
         if <id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', id>) then
@@ -163,12 +174,13 @@ new ~deviceChannel3;
 
 
 new ~secureChannel;
+new ~key;
 
 //new ~ssk_AttestServer;
 //let spk_AttestServer = pk(~ssk_AttestServer) in
 //out(spk_AttestServer);
 
-(Device | YourServer | AttestServer)
+(Device | !YourServer | !AttestServer)
 
 lemma types [sources]:
     " 
@@ -219,8 +231,8 @@ lemma types3 [sources]:
 
 
 
-//lemma Debug1: exists-trace "Ex #i. Debug1()@i"
-//lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
 lemma Debug3: exists-trace "Ex #i. Debug3()@i"
 //lemma Debug4: exists-trace "Ex #i. Debug4()@i"
 

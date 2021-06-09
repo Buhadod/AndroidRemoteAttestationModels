@@ -1,1 +1,1 @@
-docker exec -it tam_doc  tamarin-prover --prove  /root/tamarin/CodeProtectionModel/SAPIC/KnoxV2_with_locations_P.sapic
+docker exec -it tam_doc  tamarin-prover --prove  /root/tamarin/CodeProtectionModel/SAPIC/safetynet2.sapic

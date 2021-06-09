@@ -1,1 +1,1 @@
-docker exec -it tam_doc  tamarin-prover interactive  /root/tamarin/CodeProtectionModel/SAPIC/.  --interface=*4 -p=8200
+docker exec -it tam_doc  tamarin-prover interactive  /root/tamarin/CodeProtectionModel/SAPIC/protocols_final/.  --interface=*4 -p=8200

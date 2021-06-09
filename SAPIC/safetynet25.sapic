@@ -1,0 +1,111 @@
+theory Safetynet2
+begin
+
+builtins:
+    locations-report,
+    symmetric-encryption
+
+let RootKit =
+    in(status);
+    insert 'device', 'rooted';
+    event DeviceStatus(status);
+    0
+
+let PlayService =
+    !(
+        in(~secureChannel,nonceSW);
+        
+        lookup <'device'> as measurement in
+        if measurement = 'valid' then
+            event Debug2_S1();
+            let blob = senc(~key,<nonceSW,'verdict_OK'>) in
+            out(~secureChannel2,blob)
+        else
+            event Debug2_S2();
+            let blob = senc(~key,<nonceSW,'verdict_INVALID'>) in
+            out(~secureChannel2,blob);
+            out(~key)
+       
+    )
+ 
+let YourApp =
+    !(
+        event RepackedAppStarts(~id);
+        in(~deviceChannel, nonceA);
+
+        out(nonceA);
+
+        event Debug1();
+        event ReceivedNonce(nonceA);
+        
+        out(~secureChannel,nonceA);
+        
+        in(~secureChannel2,blobA);
+        event Debug2();
+
+        out(~deviceChannel2, blobA);
+        
+        in(~deviceChannel3, secretA);
+        event AppReceives(secretA);
+        event Debug3();
+        0
+
+    )
+
+let Server = 
+    !(
+        new ~nonce;
+        new ~secret;
+        event GeneratedSecret(~nonce);
+        event GeneratedNonce(~nonce);
+        event GeneratedKey(~key);
+
+        out(~deviceChannel, ~nonce);
+       
+        in(~deviceChannel2,senc(~key,<~nonce,verdict>));
+
+        if verdict = 'verdict_OK' then
+            event Debug4();
+            out(~deviceChannel3, ~secret)
+        else
+            event Debug5();
+        
+        
+        0
+       
+    )
+
+
+
+new ~deviceChannel;
+new ~deviceChannel2;
+new ~deviceChannel3;
+
+new ~secureChannel;
+new ~secureChannel2;
+
+new ~key;
+
+
+new ~id;
+
+insert 'device', 'valid';
+
+(!Server |!PlayService| !YourApp | !RootKit)
+
+
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+
+lemma Debug4: exists-trace "Ex #i. Debug4()@i"
+lemma Debug5: exists-trace "Ex #i. Debug5()@i"
+
+lemma Debug2_S1: exists-trace "Ex #i. Debug2_S1()@i"
+lemma Debug2_S2: exists-trace "Ex #i. Debug2_S2()@i"
+
+lemma test: exists-trace "Ex nonce key #i #j #ki #kj. GeneratedNonce(nonce)@i & GeneratedKey(key)@j & K(nonce)@ki & K(key)@kj"
+
+end
+
+
