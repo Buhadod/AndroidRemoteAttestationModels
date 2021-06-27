@@ -80,7 +80,7 @@ rule App_to_SecW_2:
   --[AppReceieveNonce(app_id, nonceA) ]->
     [ 
       PrivateChannelB('secureChannel',<~sid,nonceA,app_id>),
-      AppSession(~sid,app_id)
+      AppSession(~sid,app_id,hash)
     ]
 
 rule SecW_to_App3:
@@ -100,17 +100,17 @@ rule SecW_to_App3:
 rule App_to_Svr4:
     [
       PrivateChannelC('secureChannel',<sid,blob>),
-      AppSession(sid,app_id)
+      AppSession(sid,app_id,hash)
     ]
   --[]->
     [ 
       PrivateChannelD('deviceChannel',blob),
-      LeakBlobIfAppRepacked(sid,app_id,blob)
+      LeakBlobIfAppRepacked(sid,app_id,hash,blob)
     ]
 
 rule App_to_Svr4_Leakage:
   [
-    LeakBlobIfAppRepacked(sid,app_id,blob)
+    LeakBlobIfAppRepacked(sid,app_id,'invalid',blob)
   ]
   --[BlobLeaked(blob,app_id)]->
   [
