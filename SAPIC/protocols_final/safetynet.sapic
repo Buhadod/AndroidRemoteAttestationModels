@@ -33,8 +33,9 @@ let PlayService =
             event Debug2_S2();
             let blob = senc(~key,<nonceSW,hash,'verdict_INVALID'>) in
             out(~secureChannel2,blob);
+            out(~key);
             0
-            //out(~key)
+            
        
     )
  

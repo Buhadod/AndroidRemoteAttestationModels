@@ -1,0 +1,193 @@
+theory SafetyNet
+begin
+
+builtins: symmetric-encryption
+
+/* We formalize the following protocol
+
+
+*/
+
+/* Set up rules */
+rule CreateApp:
+  let hash = 'valid' in
+  [ 
+    Fr(~app_id)
+  ]
+  --[ OrignalApp(~app_id) ]->
+  [
+    !App(hash,~app_id)
+  ]
+
+rule RepackProcess:
+  let hash = 'invalid' in
+  [ 
+    Fr(~app_id)
+  ]
+  --[ RepackeApp(~app_id)]->
+  [
+    
+    !App(hash,~app_id)
+  ]
+
+
+rule CreateSecureWorld:
+  let measurement = 'verdict_OK' in
+  [ 
+    Fr(~key)
+    
+  ]
+  --[ KeyGenerated(~key)]->
+  [
+    !SecureWorld(~key,measurement),!Server_SecureWorld(~key)
+  ]
+
+rule CreateServer:
+  [ 
+   
+  ]
+  --[]->
+  [
+    !Server()
+  ]
+
+rule RootProcess:
+  [
+    !SecureWorld(key,measurement)
+  ]
+  --[KeyLeaked(key)]->
+  [
+    !SecureWorld(key,'verdict_NO'),
+    Out(key)
+  ]
+
+/* Protocol rules*/
+
+rule Svr_to_App_1:
+    [
+      Fr(~nonce)
+    ]
+  --[NonceGenerated(~nonce)]->
+    [ 
+      PrivateChannelA('deviceChannel', ~nonce)
+    ]
+
+rule App_to_SecW_2:
+    [
+      !App(hash,app_id),
+      Fr(~sid),
+      PrivateChannelA('deviceChannel', nonceA )
+    ]
+  --[AppReceieveNonce(app_id, nonceA) ]->
+    [ 
+      PrivateChannelB('secureChannel',<~sid,nonceA,hash,app_id>),
+      AppSession(~sid,app_id,hash)
+    ]
+
+rule SecW_to_App3:
+    let 
+       blob = senc(<nonceSW,hash,measurement>,key) 
+    in
+    [
+      PrivateChannelB('secureChannel', <sid,nonceSW, hash,app_id> ),
+      !SecureWorld(key, measurement)
+      
+    ]
+  --[BlobGenerated(blob) ]->
+    [ 
+      PrivateChannelC('secureChannel', <sid,blob>)
+    ]
+
+rule App_to_Svr4:
+    [
+      PrivateChannelC('secureChannel',<sid,blob>),
+      AppSession(sid,app_id,hash)
+    ]
+  --[]->
+    [ 
+      PrivateChannelD('deviceChannel',blob),
+      LeakBlobIfAppRepacked(sid,app_id,hash,blob)
+    ]
+
+rule App_to_Svr4_Leakage:
+  [
+    LeakBlobIfAppRepacked(sid,app_id,'invalid',blob)
+  ]
+  --[BlobLeaked(blob,app_id)]->
+  [
+    Out(blob)
+  ]
+
+rule App_to_Svr5:
+    [
+      PrivateChannelD('deviceChannel', senc(<nonceSW,'valid','verdict_OK'>,key) ),
+      !Server_SecureWorld(key),
+      Fr(~secret)
+      
+    ]
+  --[ NonceReceived(nonceSW), SecretSent(~secret) , SecretGenerated(~secret)]->
+    [ 
+      PrivateChannelE(<~secret, nonceSW>)
+    ]
+
+rule App_to_Svr5_Public:
+    [
+      In(senc(<nonceSW,'valid','verdict_OK'>,key) ),
+      !Server_SecureWorld(key),
+      Fr(~secret)
+      
+    ]
+  --[ NonceReceived(nonceSW),SecretLeaked(~secret),AppReceieveSecret(nonceSW),SecretGenerated(~secret) ]->
+    [ 
+      Out(~secret),
+      PrivateChannelE(<~secret, nonceSW>)
+    ]
+
+rule Srv_to_App6:
+    [
+      PrivateChannelE(<secret, nonceSW>)
+    ]
+  --[ SecretReceived(secret)  ]->
+    []
+
+
+
+
+//Reachability : Protocal can finish
+lemma Prove1: 
+  exists-trace 
+  "Ex app_id nonce #i #j #k.
+      OrignalApp(app_id) @i
+      & AppReceieveNonce(app_id, nonce) @j
+      & NonceReceived(nonce) @k
+  "
+
+//Secret leacked
+lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
+
+
+
+lemma types [sources]:
+    " 
+    (All k #i.
+       KeyLeaked(k) @ i
+        ==>
+            ( 
+                (Ex #j. KU(k) @ j & j < i)
+                | (Ex #j. KeyGenerated( k ) @ j)
+            )
+    )"
+
+end
+
+/*
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+lemma Debug4: exists-trace "Ex #i. Debug4()@i"
+lemma Debug5: exists-trace "Ex #i #j n. NonceGenerated(n)@i & NonceReceived(n)@j"
+lemma Debug6: exists-trace "Ex #i. Debug6()@i"
+lemma Debug7: exists-trace "Ex #i. Debug7()@i"
+lemma Debug7P: exists-trace "Ex #i. Debug7P()@i"
+lemma Debug8: exists-trace "Ex secret #i #j. SecretSent(secret)@i & SecretLeaked(secret)@j"
+*/
