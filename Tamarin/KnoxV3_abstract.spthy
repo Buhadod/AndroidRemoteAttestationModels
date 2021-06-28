@@ -83,7 +83,7 @@ rule App_to_SecW_2:
       AppSession(~sid,app_id,hash)
     ]
 
-rule SecW_to_Srv3:
+rule SecW_to_App3:
     let 
        blob = senc(<nonceSW,hash,measurement>,key) 
     in
@@ -94,56 +94,32 @@ rule SecW_to_Srv3:
     ]
   --[BlobGenerated(blob) ]->
     [ 
-      PrivateChannelX('secureServerChannel', <sid,blob>),
-      SaveSWStatus(sid,blob)
+      PrivateChannelC('secureChannel', <sid,blob>)
     ]
 
-
-rule Srv_to_SecW4:
+rule App_to_Svr4:
     [
-      Fr(~uid),
-      PrivateChannelX('secureServerChannel', <sid,blob>)
-    ]
-  --[ ]->
-    [ 
-      PrivateChannelY('secureServerChannel', <sid,blob,~uid>),
-      SaveServerStatus(~uid,blob)
-    ]
-
-rule SecW_to_App5:
-    [
-      PrivateChannelY('secureServerChannel', <sid,blob,uid>),
-      SaveSWStatus(sid,blob)
-    ]
-  --[]->
-    [ 
-      PrivateChannelC('secureChannel', <sid,uid>)
-    ]
-
-rule App_to_Svr6:
-    [
-      PrivateChannelC('secureChannel',<sid,uid>),
+      PrivateChannelC('secureChannel',<sid,blob>),
       AppSession(sid,app_id,hash)
     ]
   --[]->
     [ 
-      PrivateChannelD('deviceChannel',uid),
-      LeakUIDIfAppRepacked(sid,app_id,hash,uid)
+      PrivateChannelD('deviceChannel',blob),
+      LeakBlobIfAppRepacked(sid,app_id,hash,blob)
     ]
 
-rule App_to_Svr6_Leakage:
+rule App_to_Svr4_Leakage:
   [
-    LeakUIDIfAppRepacked(sid,app_id,'invalid',uid)
+    LeakBlobIfAppRepacked(sid,app_id,'invalid',blob)
   ]
-  --[UIDLeaked(uid,app_id)]->
+  --[BlobLeaked(blob,app_id)]->
   [
-    Out(uid)
+    Out(blob)
   ]
 
-rule App_to_Svr7:
+rule App_to_Svr5:
     [
-      PrivateChannelD('deviceChannel', uid ),
-      SaveServerStatus(uid,senc(<nonceSW,'valid','verdict_OK'>,key)),
+      PrivateChannelD('deviceChannel', senc(<nonceSW,'valid','verdict_OK'>,key) ),
       !Server_SecureWorld(key),
       Fr(~secret)
       
@@ -153,10 +129,9 @@ rule App_to_Svr7:
       PrivateChannelE(<~secret, nonceSW>)
     ]
 
-rule App_to_Svr7_Public:
+rule App_to_Svr5_Public:
     [
-      In(uid ),
-      SaveServerStatus(uid,senc(<nonceSW,'valid','verdict_OK'>,key)),
+      In(senc(<nonceSW,'valid','verdict_OK'>,key) ),
       !Server_SecureWorld(key),
       Fr(~secret)
       
@@ -167,7 +142,7 @@ rule App_to_Svr7_Public:
       PrivateChannelE(<~secret, nonceSW>)
     ]
 
-rule Srv_to_App8:
+rule Srv_to_App6:
     [
       PrivateChannelE(<secret, nonceSW>)
     ]
