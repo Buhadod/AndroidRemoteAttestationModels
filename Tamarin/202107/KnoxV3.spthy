@@ -68,7 +68,8 @@ rule Svr_to_App_1:
     ]
   --[NonceGenerated(~nonce)]->
     [ 
-      PrivateChannelA('deviceChannel', ~nonce)
+      PrivateChannelA('deviceChannel', ~nonce),
+      ServerCreateNonce(~nonce)
     ]
 
 rule App_to_SecW_2:
@@ -80,7 +81,8 @@ rule App_to_SecW_2:
   --[AppReceieveNonce(app_id, nonceA) ]->
     [ 
       PrivateChannelB('secureChannel',<~sid,nonceA,hash,app_id>),
-      AppSession(~sid,app_id,hash)
+      AppSession(~sid,app_id,hash),
+      AppSessionReceieveNonce(nonceA,hash) 
     ]
 
 rule SecW_to_Srv3:
@@ -144,27 +146,25 @@ rule App_to_Svr7:
     [
       PrivateChannelD('deviceChannel', uid ),
       SaveServerStatus(uid,senc(<nonceSW,'valid','verdict_OK'>,key)),
+      AppSessionReceieveNonce(nonceSW,hash),
+      ServerCreateNonce(nonceSW),
       !Server_SecureWorld(key),
       Fr(~secret)
       
     ]
   --[NonceReceived(nonceSW), SecretSent(~secret) , SecretGenerated(~secret)]->
     [ 
-      PrivateChannelE(<~secret, nonceSW>)
+      PrivateChannelE(<~secret, nonceSW>),
+      LeakSecretIfAppRepacked(hash,~secret)
     ]
 
-rule App_to_Svr7_Public:
+rule Srv_to_App6_If_Leakage:
     [
-      In(uid ),
-      SaveServerStatus(uid,senc(<nonceSW,'valid','verdict_OK'>,key)),
-      !Server_SecureWorld(key),
-      Fr(~secret)
-      
+      LeakSecretIfAppRepacked('invalid',secret)
     ]
-  --[NonceReceived(nonceSW),SecretLeaked(~secret),AppReceieveSecret(nonceSW),SecretGenerated(~secret) ]->
-    [ 
-      Out(~secret),
-      PrivateChannelE(<~secret, nonceSW>)
+  --[ SecretLeaked(secret)  ]->
+    [
+      Out(secret)
     ]
 
 rule Srv_to_App8:
