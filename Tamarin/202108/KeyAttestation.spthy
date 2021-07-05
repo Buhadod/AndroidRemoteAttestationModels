@@ -1,7 +1,7 @@
-theory KnoxV2
+theory KeyAttestation
 begin
 
-builtins: symmetric-encryption
+builtins: signing
 
 /* We formalize the following protocol
 
@@ -69,41 +69,31 @@ rule ComprimiseDevice:
 
 /* Protocol rules*/
 
-rule Svr_to_App_1:
-    [
-      Fr(~nonce)
-    ]
-  --[NonceGenerated(~nonce)]->
-    [ 
-      PrivateChannelA('deviceChannel', ~nonce),
-      ServerCreateNonce(~nonce)
-    ]
-
 rule App_to_SecW_2:
     [
       !App(hash,app_id),
-      Fr(~sid),
-      PrivateChannelA('deviceChannel', nonceA )
+      Fr(~sid)
     ]
-  --[AppReceieveNonce(app_id, nonceA) ]->
+  --[ AppReceieveNonce(app_id) ]->
     [ 
-      PrivateChannelB('secureChannel',<~sid,nonceA,app_id>),
+      PrivateChannelB('secureChannel',<~sid,hash,app_id>),
       AppSession(~sid,app_id,hash),
-      AppSessionReceieveNonce(nonceA,hash) 
+      AppSessionReceieveNonce(hash,app_id) 
     ]
 
 rule SecW_to_App3:
     let 
-       blob = senc(<nonceSW,software_measurement,hardware_measurement>,key) 
+       blob = <pk(key),sign(<hash,software_measurement,hardware_measurement>,key)>
     in
     [
-      PrivateChannelB('secureChannel', <sid,nonceSW,app_id> ),
+      PrivateChannelB('secureChannel', <sid,hash,app_id> ),
       !Device(dev_id,key,software_measurement,hardware_measurement)
       
     ]
   --[BlobGenerated(blob,app_id,dev_id)  ]->
     [ 
-      PrivateChannelC('secureChannel', <sid,blob>)
+      PrivateChannelC('secureChannel', <sid,blob>),
+      Save2DeviceIdStatus(sid,dev_id,app_id,hardware_measurement)
     ]
 
 rule App_to_Svr4:
@@ -113,7 +103,7 @@ rule App_to_Svr4:
     ]
   --[]->
     [ 
-      PrivateChannelD('deviceChannel',blob),
+      PrivateChannelD('deviceChannel',<sid,app_id,blob>),
       LeakBlobIfAppRepacked(sid,app_id,hash,blob)
     ]
 
@@ -128,45 +118,54 @@ rule App_to_Svr4_Leakage:
 
 rule Svr_to_App5:
     [
-      PrivateChannelD('deviceChannel', senc(<nonceSW,software_measurement,'verdict_OK'>,key) ),
+      PrivateChannelD('deviceChannel',<sid,appid, <pk(key), sign(<'valid',software_measurement,'verdict_OK'>,key)>  > ),
       !Server_SecureWorld(key),
-      ServerCreateNonce(nonceSW),
       Fr(~secret)
-      
     ]
-  --[ NonceReceived(nonceSW), SecretGenerated(~secret)]->
+  --[ NonceReceived(appid), SecretGenerated(~secret)]->
     [ 
-      PrivateChannelE(<~secret, nonceSW>)
+      PrivateChannelE(<sid,~secret>)
     ]
 
 
 rule App_from_Svr6:
     [
-      PrivateChannelE(<secret, nonceSW>),
-      AppSessionReceieveNonce(nonceSW,hash)
-      
+      PrivateChannelE(<sid,secret>),
+      AppSessionReceieveNonce(hash,app_id),
+      Save2DeviceIdStatus(sid,dev_id,app_id,hardware_measurement)
     ]
   --[ SecretReceived(secret)  ]->
     [
-      LeakSecretIfAppRepacked(hash,secret)
+      LeakSecretIfAppRepacked(hash,secret),
+      LeakSecretIfDeviceCompomised(hardware_measurement,secret)
     ]
 
-rule Srv_to_App6_If_Leakage:
+rule App_from_Svr6_If_Leakage_via_app_repack:
     [
       LeakSecretIfAppRepacked('invalid',secret)
     ]
-  --[ SecretLeaked(secret)  ]->
+  --[ SecretLeaked(secret)]->
     [
       Out(secret)
     ]
 
+rule App_from_Svr6_If_Leakage_via_device_compomised:
+    [
+      LeakSecretIfDeviceCompomised('verdict_NO',secret)
+    ]
+  --[ SecretLeaked(secret)]->
+    [
+      Out(secret)
+    ]
+
+
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id nonce #i #j #k.
+  "Ex app_id #i #j #k.
       OrignalApp(app_id) @i
-      & AppReceieveNonce(app_id, nonce) @j
-      & NonceReceived(nonce) @k
+      & AppReceieveNonce(app_id) @j
+      & NonceReceived(app_id) @k
   "
 
 //Secret leacked
