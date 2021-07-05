@@ -74,7 +74,7 @@ rule ComprimiseDevice:
   ]
   --[DeviceComprimised(dev_id)]->
   [
-    !Device(dev_id,key,fake_measurement,<'verdict_NO'>)
+    !Device(dev_id,key,fake_measurement,'verdict_NO')
   ]
 
 /* Protocol rules*/
@@ -159,7 +159,7 @@ rule App_to_Svr6_Leakage:
     Out(uid)
   ]
 
-rule App_to_Svr7:
+rule Svr_to_App7:
     [
       PrivateChannelD('deviceChannel', uid ),
       SaveServerStatus(uid,senc(<nonceSW,'valid',software_measurement,'verdict_OK'>,key)),
@@ -171,25 +171,29 @@ rule App_to_Svr7:
     ]
   --[NonceReceived(nonceSW), SecretSent(~secret) , SecretGenerated(~secret)]->
     [ 
-      PrivateChannelE(<~secret, nonceSW>),
-      LeakSecretIfAppRepacked(hash,~secret)
+      PrivateChannelE(<~secret, nonceSW>)
+      
     ]
 
-rule Srv_to_App6_If_Leakage:
+rule App_from_Svr8:
+    [
+      PrivateChannelE(<secret, nonceSW>),
+      AppSessionReceieveNonce(nonceSW,hash)
+    ]
+  --[ SecretReceived(secret)  ]->
+    [
+      LeakSecretIfAppRepacked(hash,secret)
+    ]
+
+rule App_from_Svr8_If_Leakage:
     [
       LeakSecretIfAppRepacked('invalid',secret)
     ]
-  --[ SecretLeaked(secret)  ]->
+  --[ SecretLeaked(secret)]->
     [
       Out(secret)
     ]
 
-rule Srv_to_App8:
-    [
-      PrivateChannelE(<secret, nonceSW>)
-    ]
-  --[SecretReceived(secret)  ]->
-    []
 
 
 //Reachability : Protocal can finish

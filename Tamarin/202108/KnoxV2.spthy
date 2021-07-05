@@ -63,7 +63,7 @@ rule ComprimiseDevice:
   ]
   --[DeviceComprimised(dev_id)]->
   [
-    !Device(dev_id,key,fake_measurement,<'verdict_NO'>)
+    !Device(dev_id,key,fake_measurement,'verdict_NO')
   ]
 
 
@@ -126,10 +126,11 @@ rule App_to_Svr4_Leakage:
     Out(blob)
   ]
 
-rule App_to_Svr5:
+rule Svr_to_App5:
     [
       PrivateChannelD('deviceChannel', senc(<nonceSW,software_measurement,'verdict_OK'>,key) ),
       !Server_SecureWorld(key),
+      ServerCreateNonce(nonceSW),
       Fr(~secret)
       
     ]
@@ -139,11 +140,11 @@ rule App_to_Svr5:
     ]
 
 
-rule Srv_to_App6:
+rule App_from_Svr6:
     [
       PrivateChannelE(<secret, nonceSW>),
-      AppSessionReceieveNonce(nonceSW,hash),
-      ServerCreateNonce(nonceSW)
+      AppSessionReceieveNonce(nonceSW,hash)
+      
     ]
   --[ SecretReceived(secret)  ]->
     [
