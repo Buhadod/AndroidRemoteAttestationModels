@@ -1,4 +1,4 @@
-theory SafetyNet_hardware
+theory SafetyNet_KeyAttestation
 begin
 
 builtins: symmetric-encryption
