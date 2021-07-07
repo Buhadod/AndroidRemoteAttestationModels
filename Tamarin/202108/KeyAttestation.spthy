@@ -3,6 +3,17 @@ begin
 
 builtins: signing
 
+/*
+ * Protocol:     Key attesation
+ * Modeler:      Code protection project
+ * Described in: https://developer.android.com/training/articles/security-key-attestation
+ *               https://source.android.com/security/keystore/attestation
+ * Figure        Based on figures/b.pdf
+ * Date:         July 2021
+ *
+ * Status:       working
+ */
+
 /* We formalize the following protocol
 
 

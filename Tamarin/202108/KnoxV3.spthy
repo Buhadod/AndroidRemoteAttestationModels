@@ -3,6 +3,17 @@ begin
 
 builtins: symmetric-encryption
 
+/*
+ * Protocol:     Knox attestation V3
+ * Modeler:      Code protection project
+ * Described in: https://docs.samsungknox.com/dev/knox-attestation/about-attestation.htm
+ *               https://docs.samsungknox.com/devref/knox-attestation/index.htm
+ * Figure        Based on figures/a.pdf
+ * Date:         July 2021
+ *
+ * Status:       working
+ */
+
 /* We formalize the following protocol
 
 
