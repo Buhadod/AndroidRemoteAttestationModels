@@ -23,7 +23,8 @@ builtins: symmetric-encryption ,  signing
 
 rule RepackProcess:
   let 
-    SelfsignAppSignature = sign(appPackage,~DebugKey)
+    repackedApk = <appPackage,'sourcecode','resources'>
+    SelfsignAppSignature = sign( repackedApk,~DebugKey)
   in  
   [ 
     !App(appPackage,appSignature),
@@ -37,8 +38,9 @@ rule RepackProcess:
 
 rule CreateApplication:
   let 
-      appPackage = <'packagename','sourcecode','resources'> 
-      appSignature = sign(appPackage,~DeveloperKey)
+      appPackage = 'appPackage'
+      apk = <appPackage,'sourcecode','resources'> 
+      appSignature = sign(apk,~DeveloperKey)
   in
   [
     Fr(~DeveloperKey)
@@ -63,15 +65,6 @@ rule CreateDevice:
   [
     !Device(~dev_id,~key,software_measurement,hardware_measurement),
     !Server_SecureWorld(~key)
-  ]
-
-rule CreateServer:
-  [ 
-   
-  ]
-  --[ ]->
-  [
-    !Server()
   ]
 
 
@@ -147,8 +140,8 @@ rule App_to_Dvr4_Leakage:
   [
     //retrive debug key
     !GetDebugKey(DebugKey,appPackage),
-    //check if the app selfsigned
-    LeakBlobIfAppRepacked(sid,app_id,appPackage,sign(appPackage,DebugKey),blob)
+    //check if the app selfsigned/repacked
+    LeakBlobIfAppRepacked(sid,app_id,appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),blob)
   ]
   --[BlobLeaked(blob,app_id)]->
   [
@@ -171,19 +164,22 @@ rule Svr_to_Dvr_6:
       PrivateChannelE('deviceChannel',<sid,senc(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,key)> ),
       !Server_SecureWorld(key)
     ]
-  --[]->
+  --[Debug()]->
     [ 
       PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
     ]
 
 rule Svr_to_Dvr_7:
+    let
+      apk = <appPackage,'sourcecode','resources'>
+    in
     [
       !GetDeveloperKey(DeveloperKey,appPackage),
-      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,sign(appPackage,DeveloperKey),'valid',hardware_measurement> ),
+      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid',hardware_measurement> ),
       DeveloperCreateNonce(nonceSW),
       Fr(~secret)
     ]
-  --[ NonceReceived(nonceSW), SecretGenerated(~secret)]->
+  --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
     [ 
       PrivateChannelG(<sid,~secret, nonceSW>)
     ]
@@ -205,7 +201,7 @@ rule App_from_Svr8_If_Leakage_via_app_repack:
       //retrive debug key
       !GetDebugKey(DebugKey,appPackage),
       //check if the app selfsigned
-      LeakSecretIfAppRepacked(appPackage,sign(appPackage,DebugKey),secret)
+      LeakSecretIfAppRepacked(appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),secret)
     ]
   --[ SecretLeaked(secret)]->
     [
@@ -230,6 +226,7 @@ lemma Prove1:
       & AppReceieveNonce(app_id,appPackage, nonce) @j
       & NonceReceived(nonce) @k
   "
+
 
 //Secret leacked
 lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
