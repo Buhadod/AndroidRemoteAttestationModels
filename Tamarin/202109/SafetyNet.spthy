@@ -1,7 +1,7 @@
 theory SafetyNet
 begin
 
-builtins: symmetric-encryption
+builtins: symmetric-encryption ,  signing
 
 
 
@@ -21,33 +21,39 @@ builtins: symmetric-encryption
 */
 
 
-/* Set up rules */
-rule CreateApp:
-  let hash = 'valid' in
+rule RepackProcess:
+  let 
+    SelfsignAppSignature = sign(appPackage,~DebugKey)
+  in  
   [ 
-    Fr(~app_id)
+    !App(appPackage,appSignature),
+    Fr(~DebugKey)
   ]
-  --[ OrignalApp(~app_id) ]->
+  --[ RepackeApp(appPackage)]->
   [
-    !App(hash,~app_id)
+    !App(appPackage,SelfsignAppSignature),
+    !GetDebugKey(~DebugKey,appPackage)
   ]
 
-rule RepackProcess:
-  let hash = 'invalid' in
-  [ 
-    Fr(~app_id)
-  ]
-  --[ RepackeApp(~app_id)]->
+rule CreateApplication:
+  let 
+      appPackage = <'packagename','sourcecode','resources'> 
+      appSignature = sign(appPackage,~DeveloperKey)
+  in
   [
-    
-    !App(hash,~app_id)
+    Fr(~DeveloperKey)
+  ]
+  --[ CreateApp(appPackage)]->
+  [
+    !App(appPackage,appSignature),
+    !GetDeveloperKey(~DeveloperKey,appPackage)
   ]
 
 
 rule CreateDevice:
   let 
-  software_measurement = 'verdict_OK' 
-  hardware_measurement = 'verdict_OK' in
+  software_measurement = 'valid' 
+  hardware_measurement = 'valid' in
   [ 
     Fr(~key),
     Fr(~dev_id)
@@ -71,7 +77,7 @@ rule CreateServer:
 
 rule CreateUnlockedBootloaderDevice:
   let 
-    hardware_measurement = 'verdict_NO' in
+    hardware_measurement = 'invalid' in
   [ 
     Fr(~key),
     Fr(~dev_id),
@@ -85,105 +91,130 @@ rule CreateUnlockedBootloaderDevice:
 
 /* Protocol rules*/
 
-rule Svr_to_App_1:
+rule Dvr_to_App_1:
     [
       Fr(~nonce)
     ]
   --[NonceGenerated(~nonce)]->
     [ 
       PrivateChannelA('deviceChannel', ~nonce),
-      ServerCreateNonce(~nonce)
+      DeveloperCreateNonce(~nonce)
     ]
 
 rule App_to_SecW_2:
     [
-      !App(hash,app_id),
+      !App(appPackage,appSignature),
       //create attestation session id (sid)
       Fr(~sid),
+      Fr(~app_id),
       PrivateChannelA('deviceChannel', nonceA )
     ]
-  --[ AppReceieveNonce(app_id, nonceA) ]->
+  --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
-      PrivateChannelB('secureChannel',<~sid,nonceA,hash,app_id>),
-      SaveAppIntegritySession(~sid,app_id,hash)
+      PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
+      SaveAppIntegritySession(~sid,~app_id,appPackage,appSignature)
     ]
 
 rule SecW_to_App3:
     let 
-       blob = senc(<nonceSW,hash,software_measurement,hardware_measurement>,key) 
+       blob = senc(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,key) 
     in
     [
-      PrivateChannelB('secureChannel', <sid,nonceSW,hash,app_id> ),
+      PrivateChannelB('secureChannel', <sid,nonceSW,appPackage,appSignature,app_id> ),
       !Device(dev_id,key,software_measurement,hardware_measurement)
       
     ]
   --[BlobGenerated(blob,app_id,dev_id)  ]->
     [ 
-      //We added hash and app_id in the return message to find later if the app repacked or not
       PrivateChannelC('secureChannel', <sid,blob>),
-      SaveDeviceIntegritySession(sid,app_id,hash,software_measurement,hardware_measurement)
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
 
-rule App_to_Svr4:
+rule App_to_Dvr4:
     [
       PrivateChannelC('secureChannel',<sid,blob>),
       //Get app integrity check
-      SaveAppIntegritySession(sid,app_id,hash)
+      SaveAppIntegritySession(sid,app_id,appPackage,appSignature)
     ]
   --[]->
     [ 
       PrivateChannelD('deviceChannel',<sid,blob>),
       
-      LeakBlobIfAppRepacked(sid,app_id,hash,blob)
+      LeakBlobIfAppRepacked(sid,app_id,appPackage,appSignature,blob)
     ]
 
-rule App_to_Svr4_Leakage:
+rule App_to_Dvr4_Leakage:
   [
-    LeakBlobIfAppRepacked(sid,app_id,'invalid',blob)
+    //retrive debug key
+    !GetDebugKey(DebugKey,appPackage),
+    //check if the app selfsigned
+    LeakBlobIfAppRepacked(sid,app_id,appPackage,sign(appPackage,DebugKey),blob)
   ]
   --[BlobLeaked(blob,app_id)]->
   [
-    Out(blob)
+    //create partial deconstruction and no needed
+    //Out(blob)
   ]
 
-rule Svr_to_App5:
+rule Dvr_to_Svr_5:
+  [
+    PrivateChannelD('deviceChannel',<sid,blob>)
+  ]
+  --[]->
+  [
+    PrivateChannelE('deviceChannel',<sid,blob>)
+  ]
+
+
+rule Svr_to_Dvr_6:
     [
-      PrivateChannelD('deviceChannel',<sid,senc(<nonceSW,'valid','verdict_OK',hardware_measurement>,key)> ),
-      !Server_SecureWorld(key),
-      ServerCreateNonce(nonceSW),
+      PrivateChannelE('deviceChannel',<sid,senc(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,key)> ),
+      !Server_SecureWorld(key)
+    ]
+  --[]->
+    [ 
+      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
+    ]
+
+rule Svr_to_Dvr_7:
+    [
+      !GetDeveloperKey(DeveloperKey,appPackage),
+      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,sign(appPackage,DeveloperKey),'valid',hardware_measurement> ),
+      DeveloperCreateNonce(nonceSW),
       Fr(~secret)
-      
     ]
   --[ NonceReceived(nonceSW), SecretGenerated(~secret)]->
     [ 
-      PrivateChannelE(<sid,~secret, nonceSW>)
+      PrivateChannelG(<sid,~secret, nonceSW>)
     ]
 
-
-rule App_from_Svr6:
+rule App_from_Dvr8:
     [
-      PrivateChannelE(<sid,secret, nonceSW>),
+      PrivateChannelG(<sid,secret, nonceSW>),
       //Get Device integrity from attestation time
-      SaveDeviceIntegritySession(sid,app_id,hash,software_measurement,hardware_measurement)
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
-  --[ SecretReceived(secret)  ]->
+  --[ SecretReceived(secret)]->
     [
-      LeakSecretIfAppRepacked(hash,secret),
+      LeakSecretIfAppRepacked(appPackage,appSignature,secret),
       LeakSecretIfDeviceCompomised(hardware_measurement,secret)
     ]
 
-rule App_from_Svr6_If_Leakage_via_app_repack:
+rule App_from_Svr8_If_Leakage_via_app_repack:
     [
-      LeakSecretIfAppRepacked('invalid',secret)
+      //retrive debug key
+      !GetDebugKey(DebugKey,appPackage),
+      //check if the app selfsigned
+      LeakSecretIfAppRepacked(appPackage,sign(appPackage,DebugKey),secret)
     ]
   --[ SecretLeaked(secret)]->
     [
       Out(secret)
     ]
 
-rule App_from_Svr6_If_Leakage_via_device_compomised:
+rule App_from_Svr8_If_Leakage_via_device_compomised:
     [
-      LeakSecretIfDeviceCompomised('verdict_NO',secret)
+      LeakSecretIfDeviceCompomised('invalid',secret)
     ]
   --[ SecretLeaked(secret)]->
     [
@@ -194,9 +225,9 @@ rule App_from_Svr6_If_Leakage_via_device_compomised:
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id nonce #i #j #k.
-      OrignalApp(app_id) @i
-      & AppReceieveNonce(app_id, nonce) @j
+  "Ex app_id appPackage nonce #i #j #k.
+      CreateApp(appPackage) @i
+      & AppReceieveNonce(app_id,appPackage, nonce) @j
       & NonceReceived(nonce) @k
   "
 
