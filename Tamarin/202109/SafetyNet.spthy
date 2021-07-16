@@ -1,9 +1,13 @@
 theory SafetyNet
 begin
 
-builtins: symmetric-encryption ,  signing
+builtins: signing
 
+functions: check_rep/2,  get_rep/1, rep/2 [private]
 
+equations:
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1
 
 /*
  * Protocol:     SafetyNet
@@ -57,14 +61,14 @@ rule CreateDevice:
   software_measurement = 'valid' 
   hardware_measurement = 'valid' in
   [ 
-    Fr(~key),
+    Fr(~attestationKey),
     Fr(~dev_id)
     
   ]
-  --[ KeyGenerated(~key,~dev_id)]->
+  --[ KeyGenerated(~attestationKey,~dev_id)]->
   [
-    !Device(~dev_id,~key,software_measurement,hardware_measurement),
-    !Server_SecureWorld(~key)
+    !Device(~dev_id,~attestationKey,software_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
 
@@ -72,14 +76,14 @@ rule CreateUnlockedBootloaderDevice:
   let 
     hardware_measurement = 'invalid' in
   [ 
-    Fr(~key),
+    Fr(~attestationKey),
     Fr(~dev_id),
     In(<fake_measurement>)
   ]
-  --[ KeyGenerated(~key,~dev_id)]->
+  --[ KeyGenerated(~attestationKey,~dev_id)]->
   [
-    !Device(~dev_id,~key,fake_measurement,hardware_measurement),
-    !Server_SecureWorld(~key)
+    !Device(~dev_id,~attestationKey,fake_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
 /* Protocol rules*/
@@ -90,7 +94,7 @@ rule Dvr_to_App_1:
     ]
   --[NonceGenerated(~nonce)]->
     [ 
-      PrivateChannelA('deviceChannel', ~nonce),
+      PrivateChannelA('HTTPS_DeveloperServer_APP', ~nonce),
       DeveloperCreateNonce(~nonce)
     ]
 
@@ -100,7 +104,7 @@ rule App_to_SecW_2:
       //create attestation session id (sid)
       Fr(~sid),
       Fr(~app_id),
-      PrivateChannelA('deviceChannel', nonceA )
+      PrivateChannelA('HTTPS_DeveloperServer_APP', nonceA )
     ]
   --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
@@ -110,11 +114,11 @@ rule App_to_SecW_2:
 
 rule SecW_to_App3:
     let 
-       blob = senc(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,key) 
+       blob = rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>) 
     in
     [
       PrivateChannelB('secureChannel', <sid,nonceSW,appPackage,appSignature,app_id> ),
-      !Device(dev_id,key,software_measurement,hardware_measurement)
+      !Device(dev_id,attestationKey,software_measurement,hardware_measurement)
       
     ]
   --[BlobGenerated(blob,app_id,dev_id)  ]->
@@ -131,7 +135,7 @@ rule App_to_Dvr4:
     ]
   --[]->
     [ 
-      PrivateChannelD('deviceChannel',<sid,blob>),
+      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,blob>),
       
       LeakBlobIfAppRepacked(sid,app_id,appPackage,appSignature,blob)
     ]
@@ -151,42 +155,42 @@ rule App_to_Dvr4_Leakage:
 
 rule Dvr_to_Svr_5:
   [
-    PrivateChannelD('deviceChannel',<sid,blob>)
+    PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,blob>)
   ]
   --[]->
   [
-    PrivateChannelE('deviceChannel',<sid,blob>)
+    PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,blob>)
   ]
 
 
 rule Svr_to_Dvr_6:
     [
-      PrivateChannelE('deviceChannel',<sid,senc(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,key)> ),
-      !Server_SecureWorld(key)
+      PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>)> ),
+      !Server_SecureWorld(attestationKey)
     ]
   --[Debug()]->
     [ 
-      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
     ]
 
-rule Svr_to_Dvr_7:
+rule Dvr_to_App_7:
     let
       apk = <appPackage,'sourcecode','resources'>
     in
     [
       !GetDeveloperKey(DeveloperKey,appPackage),
-      PrivateChannelF('deviceChannel',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid',hardware_measurement> ),
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid',hardware_measurement> ),
       DeveloperCreateNonce(nonceSW),
       Fr(~secret)
     ]
   --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
     [ 
-      PrivateChannelG(<sid,~secret, nonceSW>)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,~secret, nonceSW>)
     ]
 
-rule App_from_Dvr8:
+rule App_from_Dvr_8:
     [
-      PrivateChannelG(<sid,secret, nonceSW>),
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret, nonceSW>),
       //Get Device integrity from attestation time
       SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
