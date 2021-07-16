@@ -1,1 +1,0 @@
-docker exec -it tam_doc  tamarin-prover interactive  /root/tamarin/CodeProtectionModel/SAPIC/KnoxV2_with_locations.SAPIC --auto-sources --interface=*4 -p=8200
