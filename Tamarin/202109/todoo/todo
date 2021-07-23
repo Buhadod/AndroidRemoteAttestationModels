@@ -17,3 +17,25 @@ remove server create
 fix !Device
 simpliefd hash
 remove app session
+
+### 19/7
+
+concept for certficate chaining
+//create_self_signed_certficate(x.1) = sign(pk(x.1),x.1),
+//verify_self_signed_certficate(sign(pk(x.1),x.1),pk(x.1)) = true,
+
+create_self_signed_certficate(x.1) = <pk(x.1), sign(pk(x.1),x.1) >,
+verify_self_signed_certficate(<pk(x.1), sign(pk(x.1),x.1) >,pk(x.1)) = true,
+
+create_chain_signed_certficate(x.1,x.2) = <pk(x.2), sign(pk(x.2),x.1) >,
+verify_chain_signed_certficate(<pk(x.2), sign(pk(x.2),x.1) >,pk(x.1)) = true,
+
+create_certficate(x.1,x.2) = <pk(x.2), sign(pk(x.2),x.1) >,
+    verify_certficate(<pk(x.2), sign(pk(x.2),x.1) >,pk(x.1)) = true
+
+
+//simple version
+
+    //Simple version
+    //create_certficate(x.2,x.3,x.1) = < pk(x.2),x.3, sign(<pk(x.2),x.3>,x.1) >,
+    //verify_certficate( < pk(x.2),x.3, sign(<pk(x.2),x.3>,x.1) > , <pk(x.1), x.4,x.5>) = true

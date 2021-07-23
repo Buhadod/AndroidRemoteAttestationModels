@@ -114,7 +114,7 @@ rule App_to_SecW_2:
 
 rule SecW_to_App3:
     let 
-       blob = rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>) 
+       blob = rep(<nonceSW,appPackage,appSignature,software_measurement>,<attestationKey,'Trustzone'>) 
     in
     [
       PrivateChannelB('secureChannel', <sid,nonceSW,appPackage,appSignature,app_id> ),
@@ -165,12 +165,12 @@ rule Dvr_to_Svr_5:
 
 rule Svr_to_Dvr_6:
     [
-      PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>)> ),
+      PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,rep(<nonceSW,appPackage,appSignature,software_measurement>,<attestationKey,'Trustzone'>)> ),
       !Server_SecureWorld(attestationKey)
     ]
   --[Debug()]->
     [ 
-      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,appSignature,software_measurement>)
     ]
 
 rule Dvr_to_App_7:
@@ -179,7 +179,7 @@ rule Dvr_to_App_7:
     in
     [
       !GetDeveloperKey(DeveloperKey,appPackage),
-      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid',hardware_measurement> ),
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid'> ),
       DeveloperCreateNonce(nonceSW),
       Fr(~secret)
     ]

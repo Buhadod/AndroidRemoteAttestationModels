@@ -1,7 +1,13 @@
 theory KnoxV3
 begin
 
-builtins: symmetric-encryption
+builtins: signing
+
+functions: check_rep/2,  get_rep/1, rep/2 [private]
+
+equations:
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1
 
 /*
  * Protocol:     Knox attestation V3
@@ -20,185 +26,218 @@ builtins: symmetric-encryption
 */
 
 /* Set up rules */
-rule CreateApp:
-  let hash = 'valid' in
-  [ 
-    Fr(~app_id)
-  ]
-  --[ OrignalApp(~app_id) ]->
-  [
-    !App(hash,~app_id)
-  ]
-
 rule RepackProcess:
-  let hash = 'invalid' in
+  let 
+    repackedApk = <appPackage,'sourcecode','resources'>
+    SelfsignAppSignature = sign( repackedApk,~DebugKey)
+  in  
   [ 
-    Fr(~app_id)
+    !App(appPackage,appSignature),
+    Fr(~DebugKey)
   ]
-  --[ RepackeApp(~app_id)]->
+  --[ RepackeApp(appPackage)]->
   [
-    
-    !App(hash,~app_id)
+    !App(appPackage,SelfsignAppSignature),
+    !GetDebugKey(~DebugKey,appPackage)
   ]
 
+rule CreateApplication:
+  let 
+      appPackage = 'appPackage'
+      apk = <appPackage,'sourcecode','resources'> 
+      appSignature = sign(apk,~DeveloperKey)
+  in
+  [
+    Fr(~DeveloperKey)
+  ]
+  --[ CreateApp(appPackage)]->
+  [
+    !App(appPackage,appSignature),
+    !GetDeveloperKey(~DeveloperKey,appPackage)
+  ]
 
-// add device id as new.
-// rule name must be CreateDevice.
-// out device id to public
-// set default measurements software and 4ardware
 
 rule CreateDevice:
-  
   let 
-  software_measurement = 'Time' 
-  hardware_measurement = 'verdict_OK' in
+  software_measurement = 'valid' 
+  hardware_measurement = 'valid' in
   [ 
-    Fr(~key),
+    Fr(~attestationKey),
     Fr(~dev_id)
     
   ]
-  --[ KeyGenerated(~key,~dev_id)]->
+  --[ KeyGenerated(~attestationKey,~dev_id)]->
   [
-    !Device(~dev_id,~key,software_measurement,hardware_measurement),
-    !Server_SecureWorld(~key),
-    Out(~dev_id)
+    !Device(~dev_id,~attestationKey,software_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
-rule CreateServer:
+
+rule CreateUnlockedBootloaderDevice:
+  let 
+    hardware_measurement = 'invalid' in
   [ 
-   
+    Fr(~attestationKey),
+    Fr(~dev_id),
+    In(<fake_measurement>)
   ]
-  --[ ]->
+  --[ KeyGenerated(~attestationKey,~dev_id)]->
   [
-    !Server()
-  ]
-
-// allow advsery to interact to in wit device id
-// advsery can set software based measurements 
-// report to 4ardware measuremnts for rootin attempts via private cannel
-
-// create an$oter rule t$at accept device id via privat$ c$annel  to save rootin$ for 4ardware via privat cannel
-rule ComprimiseDevice:
-  [
-    In(<dev_id,fake_measurement>),
-    !Device(dev_id,key,software_measurement,hardware_measurement)
-  ]
-  --[DeviceComprimised(dev_id)]->
-  [
-    !Device(dev_id,key,fake_measurement,'verdict_NO')
+    !Device(~dev_id,~attestationKey,fake_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
 /* Protocol rules*/
 
-rule Svr_to_App_1:
+rule Dvr_to_App_1:
     [
       Fr(~nonce)
     ]
   --[NonceGenerated(~nonce)]->
     [ 
-      PrivateChannelA('deviceChannel', ~nonce),
-      ServerCreateNonce(~nonce)
+      PrivateChannelA('HTTPS_DeveloperServer_APP', ~nonce),
+      DeveloperCreateNonce(~nonce)
     ]
 
 rule App_to_SecW_2:
     [
-      !App(hash,app_id),
+      !App(appPackage,appSignature),
+      //create attestation session id (sid)
       Fr(~sid),
-      PrivateChannelA('deviceChannel', nonceA )
+      Fr(~app_id),
+      PrivateChannelA('HTTPS_DeveloperServer_APP', nonceA )
     ]
-  --[AppReceieveNonce(app_id, nonceA) ]->
+  --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
-      PrivateChannelB('secureChannel',<~sid,nonceA,hash,app_id>),
-      AppSession(~sid,app_id,hash),
-      AppSessionReceieveNonce(nonceA,hash) 
+      PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
+      SaveAppIntegritySession(~sid,~app_id,appPackage,appSignature)
     ]
 
-rule SecW_to_Srv3:
+rule SecW_to_Svr3:
     let 
-       blob = senc(<nonceSW,hash,software_measurement,hardware_measurement>,key) 
+       blob = rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>) 
     in
     [
-      PrivateChannelB('secureChannel', <sid,nonceSW, hash,app_id> ),
-      !Device(dev_id,key,software_measurement,hardware_measurement)
+      PrivateChannelB('secureChannel', <sid,nonceSW,appPackage,appSignature,app_id> ),
+      !Device(dev_id,attestationKey,software_measurement,hardware_measurement)
       
     ]
-  --[ BlobGenerated(blob,app_id,dev_id) ]->
+  --[BlobGenerated(blob,app_id,dev_id)  ]->
     [ 
-      PrivateChannelX('secureServerChannel', <sid,blob>),
-      SaveSWStatus(sid,blob)
+      PrivateChannelX('HTTPS_Secureworld_AttestationServer', <sid,blob>),
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
 
-
-rule Srv_to_SecW4:
+rule Srv_to_SecW3_1:
     [
       Fr(~uid),
-      PrivateChannelX('secureServerChannel', <sid,blob>)
+      PrivateChannelX('HTTPS_Secureworld_AttestationServer', <sid,blob>)
     ]
   --[ ]->
     [ 
-      PrivateChannelY('secureServerChannel', <sid,blob,~uid>),
+      PrivateChannelY('HTTPS_Secureworld_AttestationServer', <sid,blob,~uid>),
       SaveServerStatus(~uid,blob)
     ]
 
-rule SecW_to_App5:
+rule SecW_to_App3_2:
     [
-      PrivateChannelY('secureServerChannel', <sid,blob,uid>),
-      SaveSWStatus(sid,blob)
+      PrivateChannelY('HTTPS_Secureworld_AttestationServer', <sid,blob,uid>)
     ]
   --[]->
     [ 
       PrivateChannelC('secureChannel', <sid,uid>)
     ]
 
-rule App_to_Svr6:
+rule App_to_Dvr4:
     [
       PrivateChannelC('secureChannel',<sid,uid>),
-      AppSession(sid,app_id,hash)
+      //Get app integrity check
+      SaveAppIntegritySession(sid,app_id,appPackage,appSignature)
     ]
   --[]->
     [ 
-      PrivateChannelD('deviceChannel',uid),
-      LeakUIDIfAppRepacked(sid,app_id,hash,uid)
+      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,uid>),
+      
+      LeakUIDIfAppRepacked(sid,app_id,appPackage,appSignature,uid)
     ]
 
-rule App_to_Svr6_Leakage:
+rule App_to_Dvr4_Leakage:
   [
-    LeakUIDIfAppRepacked(sid,app_id,'invalid',uid)
+    //retrive debug key
+    !GetDebugKey(DebugKey,appPackage),
+    //check if the app selfsigned/repacked
+    LeakUIDIfAppRepacked(sid,app_id,appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),uid)
   ]
   --[UIDLeaked(uid,app_id)]->
   [
-    Out(uid)
+    //create partial deconstruction and no needed
+    //Out(uid)
   ]
 
-rule Svr_to_App7:
+rule Dvr_to_Svr_5:
+  [
+    PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,uid>)
+  ]
+  --[]->
+  [
+    PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,uid>)
+  ]
+
+
+rule Svr_to_Dvr_6:
     [
-      PrivateChannelD('deviceChannel', uid ),
-      SaveServerStatus(uid,senc(<nonceSW,'valid',software_measurement,'verdict_OK'>,key)),
-      AppSessionReceieveNonce(nonceSW,hash),
-      ServerCreateNonce(nonceSW),
-      !Server_SecureWorld(key),
-      Fr(~secret)
-      
+      PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,uid>),
+      //Get blob from uid
+      SaveServerStatus(uid,rep(<nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>)),
+      !Server_SecureWorld(attestationKey)
     ]
-  --[NonceReceived(nonceSW), SecretGenerated(~secret)]->
+  --[Debug()]->
     [ 
-      PrivateChannelE(<~secret, nonceSW>)
-      
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,appSignature,software_measurement,hardware_measurement>)
     ]
 
-rule App_from_Svr8:
+rule Dvr_to_App_7:
+    let
+      apk = <appPackage,'sourcecode','resources'>
+    in
     [
-      PrivateChannelE(<secret, nonceSW>),
-      AppSessionReceieveNonce(nonceSW,hash)
+      !GetDeveloperKey(DeveloperKey,appPackage),
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,appPackage,sign(apk,DeveloperKey),'valid','valid'> ),
+      DeveloperCreateNonce(nonceSW),
+      Fr(~secret)
     ]
-  --[ SecretReceived(secret)  ]->
-    [
-      LeakSecretIfAppRepacked(hash,secret)
+  --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
+    [ 
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,~secret, nonceSW>)
     ]
 
-rule App_from_Svr8_If_Leakage:
+rule App_from_Dvr_8:
     [
-      LeakSecretIfAppRepacked('invalid',secret)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret, nonceSW>),
+      //Get Device integrity from attestation time
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+    ]
+  --[ SecretReceived(secret)]->
+    [
+      LeakSecretIfAppRepacked(appPackage,appSignature,secret),
+      LeakSecretIfDeviceCompomised(hardware_measurement,secret)
+    ]
+
+rule App_from_Svr8_If_Leakage_via_app_repack:
+    [
+      //retrive debug key
+      !GetDebugKey(DebugKey,appPackage),
+      //check if the app selfsigned
+      LeakSecretIfAppRepacked(appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),secret)
+    ]
+  --[ SecretLeaked(secret)]->
+    [
+      Out(secret)
+    ]
+
+rule App_from_Svr8_If_Leakage_via_device_compomised:
+    [
+      LeakSecretIfDeviceCompomised('invalid',secret)
     ]
   --[ SecretLeaked(secret)]->
     [
@@ -206,28 +245,17 @@ rule App_from_Svr8_If_Leakage:
     ]
 
 
-
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id nonce #i #j #k.
-      OrignalApp(app_id) @i
-      & AppReceieveNonce(app_id, nonce) @j
+  "Ex app_id appPackage nonce #i #j #k.
+      CreateApp(appPackage) @i
+      & AppReceieveNonce(app_id,appPackage, nonce) @j
       & NonceReceived(nonce) @k
   "
 
-//Reachability : Protocal can finish
-lemma Prove2: 
-  exists-trace 
-  "Ex app_id dev_id blob #i #j #k.
-      OrignalApp(app_id) @i
-      & DeviceComprimised(dev_id) @j
-      & BlobGenerated(blob,app_id,dev_id) @k
-  "
 
 //Secret leacked
-lemma Prove3: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
-
-
+lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
 end

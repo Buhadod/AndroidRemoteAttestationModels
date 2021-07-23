@@ -3,6 +3,31 @@ begin
 
 builtins: signing
 
+functions: 
+  check_rep/2,  get_rep/1, rep/2 [private],
+  create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+
+equations:
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1,
+
+    create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
+      = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
+
+    verify_certificate( 
+    < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+     , < IssuerTBSCertificateInfo, pk(IssuerSk), sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>,IssuerRootSk) >
+          ) = true,
+
+    get_tbsInfo_certificate( 
+        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+          ) = SubjectTBSCertificateInfo
+/*
+
+Fr(~root), 
+certificate = sign(pk(~root),~root)
+*/
+
 /*
  * Protocol:     Key attesation
  * Modeler:      Code protection project
@@ -17,64 +42,88 @@ builtins: signing
 /* We formalize the following protocol
 
 
+
 */
 
+
 /* Set up rules */
-rule CreateApp:
-  let hash = 'valid' in
-  [ 
-    Fr(~app_id)
-  ]
-  --[ OrignalApp(~app_id) ]->
-  [
-    !App(hash,~app_id)
-  ]
-
 rule RepackProcess:
-  let hash = 'invalid' in
+  let 
+    repackedApk = <appPackage,'sourcecode','resources'>
+    SelfsignAppSignature = sign( repackedApk,~DebugKey)
+  in  
   [ 
-    Fr(~app_id)
+    !App(appPackage,appSignature),
+    Fr(~DebugKey)
   ]
-  --[ RepackeApp(~app_id)]->
+  --[ RepackeApp(appPackage)]->
   [
-    
-    !App(hash,~app_id)
+    !App(appPackage,SelfsignAppSignature),
+    !GetDebugKey(~DebugKey,appPackage)
   ]
 
+rule CreateApplication:
+  let 
+      appPackage = 'appPackage'
+      apk = <appPackage,'sourcecode','resources'> 
+      appSignature = sign(apk,~DeveloperKey)
+  in
+  [
+    Fr(~DeveloperKey)
+  ]
+  --[ CreateApp(appPackage)]->
+  [
+    !App(appPackage,appSignature),
+    !GetDeveloperKey(~DeveloperKey,appPackage)
+  ]
+
+rule CreateAttestionServer:
+  let 
+    rootCertificate = create_certificate('TbsInfo',pk(~rootSk),~rootSk)
+  in
+  [
+    Fr(~rootSk)
+  ]
+  --[]->
+  [
+    !GetRootCertificate(rootCertificate),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+  ]
 
 rule CreateDevice:
   let 
-  software_measurement = 'verdict_OK' 
-  hardware_measurement = 'verdict_OK' in
+    software_measurement = 'valid' 
+    hardware_measurement = 'valid' 
+    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
+    certificateChain = <intermediateCertificate, rootCertificate>
+  in
   [ 
-    Fr(~key),
-    Fr(~dev_id)
+    Fr(~keystoreSk),
+    Fr(~dev_id),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
     
   ]
-  --[ KeyGenerated(~key,~dev_id)]->
+  --[ KeyGenerated(~rootSk,~dev_id)]->
   [
-    !Device(~dev_id,~key,software_measurement,hardware_measurement),
-    !Server_SecureWorld(~key),
-    Out(~dev_id)
+    !Device(~dev_id,~keystoreSk,software_measurement,hardware_measurement,certificateChain)
   ]
 
-rule CreateServer:
+
+rule CreateUnlockedBootloaderDevice:
+  let 
+    hardware_measurement = 'invalid' 
+    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
+    certificateChain = <intermediateCertificate, rootCertificate>
+  in
   [ 
-   
+    Fr(~keystoreSk),
+    Fr(~dev_id),
+    In(<fake_measurement>),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
   ]
-  --[ ]->
+  --[ KeyGenerated(~rootSk,~dev_id)]->
   [
-    !Server()
-  ]
-
-rule ComprimiseDevice:
-  [
-    In(<dev_id,fake_measurement>),
-    !Device(dev_id,key,software_measurement,hardware_measurement)
-  ]
-  --[DeviceComprimised(dev_id)]->
-  [
-    !Device(dev_id,key,fake_measurement,'verdict_NO')
+    !Device(~dev_id,~keystoreSk,fake_measurement,hardware_measurement,certificateChain)
   ]
 
 
@@ -82,102 +131,141 @@ rule ComprimiseDevice:
 
 rule App_to_SecW_2:
     [
-      !App(hash,app_id),
-      Fr(~sid)
+      !App(appPackage,appSignature),
+      //create attestation session id (sid)
+      Fr(~sid),
+      Fr(~app_id)
     ]
-  --[ AppReceieveNonce(app_id) ]->
+  --[ AppInstalled(~app_id, appPackage) ]->
     [ 
-      PrivateChannelB('secureChannel',<~sid,hash,app_id>),
-      AppSession(~sid,app_id,hash),
-      AppSessionReceieveNonce(hash,app_id) 
+      PrivateChannelB('secureChannel',<~sid,appPackage,appSignature,~app_id>),
+      SaveAppIntegritySession(~sid,~app_id,appPackage,appSignature)
     ]
 
 rule SecW_to_App3:
     let 
-       blob = <pk(key),sign(<hash,software_measurement,hardware_measurement>,key)>
+      subjectCertificate = create_certificate(<software_measurement,hardware_measurement,appPackage,appSignature>,pk(~key),keystoreSk)
+      certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate>
     in
     [
-      PrivateChannelB('secureChannel', <sid,hash,app_id> ),
-      !Device(dev_id,key,software_measurement,hardware_measurement)
+      PrivateChannelB('secureChannel', <sid,appPackage,appSignature,app_id> ),
+      !Device(dev_id,keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
+      Fr(~key)
       
     ]
-  --[BlobGenerated(blob,app_id,dev_id)  ]->
+  --[CertificateChainGenerated(certificateChain,app_id,dev_id) ]->
     [ 
-      PrivateChannelC('secureChannel', <sid,blob>),
-      Save2DeviceIdStatus(sid,dev_id,app_id,hardware_measurement)
+      PrivateChannelC('secureChannel', <sid,certificateChain>),
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
 
-rule App_to_Svr4:
+rule App_to_Dvr4:
     [
-      PrivateChannelC('secureChannel',<sid,blob>),
-      AppSession(sid,app_id,hash)
+      PrivateChannelC('secureChannel',<sid,certificateChain>),
+      //Get app integrity check
+      SaveAppIntegritySession(sid,app_id,appPackage,appSignature)
     ]
   --[]->
     [ 
-      PrivateChannelD('deviceChannel',<sid,app_id,blob>),
-      LeakBlobIfAppRepacked(sid,app_id,hash,blob)
+      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,certificateChain>),
+      
+      LeakCertificateChainIfAppRepacked(sid,app_id,appPackage,appSignature,certificateChain)
     ]
 
-rule App_to_Svr4_Leakage:
+rule App_to_Dvr4_Leakage:
   [
-    LeakBlobIfAppRepacked(sid,app_id,'invalid',blob)
+    //retrive debug key
+    !GetDebugKey(DebugKey,appPackage),
+    //check if the app selfsigned/repacked
+    LeakBlobIfAppRepacked(sid,app_id,appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),certificateChain)
   ]
-  --[BlobLeaked(blob,app_id)]->
+  --[CertificateChainLeaked(certificateChain,app_id)]->
   [
-    Out(blob)
+    //create partial deconstruction and no needed
+    //Out(certificateChain)
   ]
 
-rule Svr_to_App5:
+
+rule Dvr_verification_5:
+    let 
+      //chain certificate verfication
+      verification1 = verify_certificate(subjectCertificate, intermediateCertificate)
+      verification2 = verify_certificate(intermediateCertificate, rootCertificate)
+      verification3 = verify_certificate(rootCertificate, rootCertificate)
+      tbsInfo = get_tbsInfo_certificate(subjectCertificate)
+    in
     [
-      PrivateChannelD('deviceChannel',<sid,appid, <pk(key), sign(<'valid',software_measurement,'verdict_OK'>,key)>  > ),
-      !Server_SecureWorld(key),
+      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,<subjectCertificate, intermediateCertificate, rootCertificate>> ),
+      !GetRootCertificate(rootCertificate)
+    ]
+  --[Debug()]->
+    [ 
+      PrivateChannelF('verification',<sid,verification1,verification2,verification3,<tbsInfo>>)
+    ]
+
+rule Dvr_to_App_7:
+    let
+      apk = <appPackage,'sourcecode','resources'>
+    in
+    [
+      !GetDeveloperKey(DeveloperKey,appPackage),
+      
+      PrivateChannelF('verification',<sid,true,true,true,<'valid','valid',appPackage,sign(apk,DeveloperKey)>>),
       Fr(~secret)
     ]
-  --[ NonceReceived(appid), SecretGenerated(~secret)]->
+  --[ SecretGenerated(~secret),Debug2()]->
     [ 
-      PrivateChannelE(<sid,~secret>)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,~secret>)
     ]
 
-
-rule App_from_Svr6:
+rule App_from_Dvr_8:
     [
-      PrivateChannelE(<sid,secret>),
-      AppSessionReceieveNonce(hash,app_id),
-      Save2DeviceIdStatus(sid,dev_id,app_id,hardware_measurement)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret>),
+      //Get Device integrity from attestation time
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
-  --[ SecretReceived(secret)  ]->
+  --[ SecretReceived(secret),SecretRecievedByApp(app_id)]->
     [
-      LeakSecretIfAppRepacked(hash,secret),
+      LeakSecretIfAppRepacked(appPackage,appSignature,secret),
       LeakSecretIfDeviceCompomised(hardware_measurement,secret)
     ]
 
-rule App_from_Svr6_If_Leakage_via_app_repack:
+rule App_from_Svr8_If_Leakage_via_app_repack:
     [
-      LeakSecretIfAppRepacked('invalid',secret)
+      //retrive debug key
+      !GetDebugKey(DebugKey,appPackage),
+      //check if the app selfsigned
+      LeakSecretIfAppRepacked(appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),secret)
     ]
   --[ SecretLeaked(secret)]->
     [
       Out(secret)
     ]
 
-rule App_from_Svr6_If_Leakage_via_device_compomised:
+rule App_from_Svr8_If_Leakage_via_device_compomised:
     [
-      LeakSecretIfDeviceCompomised('verdict_NO',secret)
+      LeakSecretIfDeviceCompomised('invalid',secret)
     ]
   --[ SecretLeaked(secret)]->
     [
       Out(secret)
     ]
+
+
 
 
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id #i #j #k.
-      OrignalApp(app_id) @i
-      & AppReceieveNonce(app_id) @j
-      & NonceReceived(app_id) @k
+  "Ex app_id appPackage  #i #j #k.
+      CreateApp(appPackage) @i
+      & AppInstalled(app_id,appPackage) @j
+      & SecretRecievedByApp(app_id) @k
   "
+
+lemma Debug: exists-trace "Ex #i .Debug() @i "
+
+lemma Debug2: exists-trace "Ex #i .Debug2() @i "
 
 //Secret leacked
 lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
