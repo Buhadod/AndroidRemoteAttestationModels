@@ -103,7 +103,7 @@ rule CreateDevice:
     !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
     
   ]
-  --[ KeyGenerated(~rootSk,~dev_id)]->
+  --[ KeyGenerated(~rootSk,~dev_id),  KeyStoreCertificateGenerated(intermediateCertificate)]->
   [
     !Device(~dev_id,~keystoreSk,software_measurement,hardware_measurement,certificateChain)
   ]
@@ -121,7 +121,7 @@ rule CreateUnlockedBootloaderDevice:
     In(<fake_measurement>),
     !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
   ]
-  --[ KeyGenerated(~rootSk,~dev_id)]->
+  --[ KeyGenerated(~rootSk,~dev_id), KeyStoreCertificateGenerated(intermediateCertificate)]->
   [
     !Device(~dev_id,~keystoreSk,fake_measurement,hardware_measurement,certificateChain)
   ]
@@ -134,14 +134,14 @@ rule Dvr_to_App_1:
     ]
   --[NonceGenerated(~nonce)]->
     [ 
-      PrivateChannelA('HTTPS_DeveloperServer_APP', ~nonce),
+      Out(~nonce),
       DeveloperCreateNonce(~nonce)
     ]
 
 
 rule App_to_SecW_2:
     [
-      PrivateChannelA('HTTPS_DeveloperServer_APP', nonce),
+      In(nonce),
       !App(appPackage,appSignature),
       //create attestation session id (sid)
       Fr(~sid),
@@ -179,23 +179,9 @@ rule App_to_Dvr4:
     ]
   --[]->
     [ 
-      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,certificateChain>),
-      
-      LeakCertificateChainIfAppRepacked(sid,app_id,appPackage,appSignature,certificateChain)
+      Out(<sid,certificateChain>)
     ]
 
-rule App_to_Dvr4_Leakage:
-  [
-    //retrive debug key
-    !GetDebugKey(DebugKey,appPackage),
-    //check if the app selfsigned/repacked
-    LeakBlobIfAppRepacked(sid,app_id,appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),certificateChain)
-  ]
-  --[CertificateChainLeaked(certificateChain,app_id)]->
-  [
-    //create partial deconstruction and no needed
-    //Out(certificateChain)
-  ]
 
 
 rule Dvr_verification_5:
@@ -208,7 +194,7 @@ rule Dvr_verification_5:
       ppk = get_public_key_certificate(subjectCertificate)
     in
     [
-      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,<subjectCertificate, intermediateCertificate, rootCertificate>> ),
+      In(<sid,<subjectCertificate, intermediateCertificate, rootCertificate>> ),
       !GetRootCertificate(rootCertificate)
     ]
   --[Debug()]->
@@ -228,43 +214,22 @@ rule Dvr_to_App_7:
     ]
   --[ SecretGenerated(~secret),Debug2()]->
     [ 
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,aenc(~secret,ppk)>)
+      Out(<sid,aenc(~secret,ppk)>)
     ]
 
 rule App_to_Sw_8:
     [
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,encrypted_cipher_secret>),
+      In(<sid,encrypted_cipher_secret>),
       //Get Device integrity from attestation time
       SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
   --[ EncryptedSecretReceived(encrypted_cipher_secret),SecretRecievedByApp(app_id)]->
     [
-      LeakSecretIfAppRepacked(appPackage,appSignature,encrypted_cipher_secret),
-      LeakSecretIfDeviceCompomised(hardware_measurement,encrypted_cipher_secret),
+      //LeakSecretIfAppRepacked(appPackage,appSignature,encrypted_cipher_secret),
+      //LeakSecretIfDeviceCompomised(hardware_measurement,encrypted_cipher_secret),
       PrivateChannelH('secureChannel',<sid,app_id,encrypted_cipher_secret>)
     ]
 
-
-rule App_from_Svr8_If_Leakage_via_app_repack:
-    [
-      //retrive debug key
-      !GetDebugKey(DebugKey,appPackage),
-      //check if the app selfsigned
-      LeakSecretIfAppRepacked(appPackage,sign(<appPackage,'sourcecode','resources'>,DebugKey),secret)
-    ]
-  --[ SecretLeaked(secret)]->
-    [
-      Out(secret)
-    ]
-
-rule App_from_Svr8_If_Leakage_via_device_compomised:
-    [
-      LeakSecretIfDeviceCompomised('invalid',secret)
-    ]
-  --[ SecretLeaked(secret)]->
-    [
-      Out(secret)
-    ]
 
 rule Sw_to_App_9:
     [
@@ -281,11 +246,9 @@ rule Sw_to_App_9:
 rule App_from_SW_10:
     [
       PrivateChannelH('secureChannel',<sid,app_id,secret>)
-
     ]
-  --[SecretReceived(app_id)]->
-    [
-      
+  --[SecretReceived(app_id), SecretLoaded(secret)]->
+    [ 
     ]
 
 //Reachability : Protocal can finish
@@ -304,5 +267,13 @@ lemma Debug2: exists-trace "Ex #i .Debug2() @i "
 
 //Secret leacked
 lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
+
+//code execution
+/*
+It is not possibile that there exist  a secret loaded and known by the advsery and never generated
+*/
+lemma Prove3: "(not ( Ex secret #i #k #j. SecretLoaded(secret) @i & KU(secret) @k ))"
+
+
 
 end
