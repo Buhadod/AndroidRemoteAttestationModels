@@ -1,10 +1,10 @@
-theory KeyAttestation
+theory ProposedModel
 begin
 
-builtins: signing
+builtins: signing , asymmetric-encryption
 
 functions: 
-  create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+  create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1, get_public_key_certificate/1
 
 equations:
     create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
@@ -17,7 +17,11 @@ equations:
 
     get_tbsInfo_certificate( 
         < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-          ) = SubjectTBSCertificateInfo
+          ) = SubjectTBSCertificateInfo,
+
+    get_public_key_certificate( 
+      < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+          ) = pk(SubjectSk)
 /*
 
 Fr(~root), 
@@ -124,9 +128,20 @@ rule CreateUnlockedBootloaderDevice:
 
 
 /* Protocol rules*/
+rule Dvr_to_App_1:
+    [
+      Fr(~nonce)
+    ]
+  --[NonceGenerated(~nonce)]->
+    [ 
+      PrivateChannelA('HTTPS_DeveloperServer_APP', ~nonce),
+      DeveloperCreateNonce(~nonce)
+    ]
+
 
 rule App_to_SecW_2:
     [
+      PrivateChannelA('HTTPS_DeveloperServer_APP', nonce),
       !App(appPackage,appSignature),
       //create attestation session id (sid)
       Fr(~sid),
@@ -134,17 +149,17 @@ rule App_to_SecW_2:
     ]
   --[ AppInstalled(~app_id, appPackage) ]->
     [ 
-      PrivateChannelB('secureChannel',<~sid,appPackage,appSignature,~app_id>),
+      PrivateChannelB('secureChannel',<~sid,nonce,appPackage,appSignature,~app_id>),
       SaveAppIntegritySession(~sid,~app_id,appPackage,appSignature)
     ]
 
 rule SecW_to_App3:
     let 
-      subjectCertificate = create_certificate(<software_measurement,hardware_measurement,appPackage,appSignature>,pk(~key),keystoreSk)
+      subjectCertificate = create_certificate(<nonce,software_measurement,hardware_measurement,appPackage,appSignature>,pk(~key),keystoreSk)
       certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate>
     in
     [
-      PrivateChannelB('secureChannel', <sid,appPackage,appSignature,app_id> ),
+      PrivateChannelB('secureChannel', <sid,nonce,appPackage,appSignature,app_id> ),
       !Device(dev_id,keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
       Fr(~key)
       
@@ -152,7 +167,8 @@ rule SecW_to_App3:
   --[CertificateChainGenerated(certificateChain,app_id,dev_id) ]->
     [ 
       PrivateChannelC('secureChannel', <sid,certificateChain>),
-      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement),
+      SaveTEEInfo(sid,~key)
     ]
 
 rule App_to_Dvr4:
@@ -189,6 +205,7 @@ rule Dvr_verification_5:
       verification2 = verify_certificate(intermediateCertificate, rootCertificate)
       verification3 = verify_certificate(rootCertificate, rootCertificate)
       tbsInfo = get_tbsInfo_certificate(subjectCertificate)
+      ppk = get_public_key_certificate(subjectCertificate)
     in
     [
       PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,<subjectCertificate, intermediateCertificate, rootCertificate>> ),
@@ -196,7 +213,7 @@ rule Dvr_verification_5:
     ]
   --[Debug()]->
     [ 
-      PrivateChannelF('verification',<sid,verification1,verification2,verification3,<tbsInfo>>)
+      PrivateChannelF('verification',<sid,ppk,verification1,verification2,verification3,<tbsInfo>>)
     ]
 
 rule Dvr_to_App_7:
@@ -205,26 +222,28 @@ rule Dvr_to_App_7:
     in
     [
       !GetDeveloperKey(DeveloperKey,appPackage),
-      
-      PrivateChannelF('verification',<sid,true,true,true,<'valid','valid',appPackage,sign(apk,DeveloperKey)>>),
+      DeveloperCreateNonce(nonce),
+      PrivateChannelF('verification',<sid,ppk,true,true,true,<nonce,'valid','valid',appPackage,sign(apk,DeveloperKey)>>),
       Fr(~secret)
     ]
   --[ SecretGenerated(~secret),Debug2()]->
     [ 
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,~secret>)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,aenc(~secret,ppk)>)
     ]
 
-rule App_from_Dvr_8:
+rule App_to_Sw_8:
     [
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret>),
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,encrypted_cipher_secret>),
       //Get Device integrity from attestation time
       SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
-  --[ SecretReceived(secret),SecretRecievedByApp(app_id)]->
+  --[ EncryptedSecretReceived(encrypted_cipher_secret),SecretRecievedByApp(app_id)]->
     [
-      LeakSecretIfAppRepacked(appPackage,appSignature,secret),
-      LeakSecretIfDeviceCompomised(hardware_measurement,secret)
+      LeakSecretIfAppRepacked(appPackage,appSignature,encrypted_cipher_secret),
+      LeakSecretIfDeviceCompomised(hardware_measurement,encrypted_cipher_secret),
+      PrivateChannelH('secureChannel',<sid,app_id,encrypted_cipher_secret>)
     ]
+
 
 rule App_from_Svr8_If_Leakage_via_app_repack:
     [
@@ -247,16 +266,36 @@ rule App_from_Svr8_If_Leakage_via_device_compomised:
       Out(secret)
     ]
 
+rule Sw_to_App_9:
+    [
+      PrivateChannelH('secureChannel',<sid,app_id,aenc(secret,pk(key))>),
+      //Restore TEE info
+      SaveTEEInfo(sid,key)
 
+    ]
+  --[]->
+    [
+      PrivateChannelH('secureChannel',<sid,app_id,secret>)
+    ]
 
+rule App_from_SW_10:
+    [
+      PrivateChannelH('secureChannel',<sid,app_id,secret>)
+
+    ]
+  --[SecretReceived(app_id)]->
+    [
+      
+    ]
 
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id appPackage  #i #j #k.
+  "Ex app_id appPackage  #i #j #k #l.
       CreateApp(appPackage) @i
       & AppInstalled(app_id,appPackage) @j
       & SecretRecievedByApp(app_id) @k
+      & SecretReceived(app_id) @l
   "
 
 lemma Debug: exists-trace "Ex #i .Debug() @i "
