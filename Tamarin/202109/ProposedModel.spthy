@@ -272,7 +272,7 @@ lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @
 /*
 It is not possibile that there exist  a secret loaded and known by the advsery and never generated
 */
-lemma Prove3: "(not ( Ex secret #i #k #j. SecretLoaded(secret) @i & KU(secret) @k ))"
+lemma Prove3: "(not ( Ex secret #i #k . SecretLoaded(secret) @i & KU(secret) @k ))"
 
 
 
