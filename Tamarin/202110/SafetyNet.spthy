@@ -182,9 +182,6 @@ rule Svr_to_Dvr_6:
     ]
 
 rule Dvr_to_App_7:
-    let
-      apk = <appPackage,'sourcecode','resources'>
-    in
     [
       !GetDeveloperKey(d_id,developerSk),
       !DeveloperApp(d_id,<appPackageName,appContent>,appSignature),

@@ -1,30 +1,18 @@
 theory ProposedModel
 begin
 
-builtins: signing
+builtins: signing,asymmetric-encryption
 
-functions: 
-  create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+functions: check_rep/2,  get_rep/1, rep/2 [private]
 
 equations:
-    create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
-      = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
-
-    verify_certificate( 
-    < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-     , < IssuerTBSCertificateInfo, pk(IssuerSk), sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>,IssuerRootSk) >
-          ) = true,
-
-    get_tbsInfo_certificate( 
-        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-          ) = SubjectTBSCertificateInfo
-
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1
 
 /*
  * Protocol:     Code protection
  * Modeler:      Code protection project
  * Described in: 
- *               
  * Figure        
  * Date:         July 2021
  *
@@ -34,230 +22,163 @@ equations:
 /* We formalize the following protocol
 
 
-
 */
-
-
-/* Set up rules */
-rule RepackProcess:
-  let 
-    repackedApk = <appPackage,'sourcecode','resources'>
-    SelfsignAppSignature = sign( repackedApk,~DebugKey)
-  in  
-  [ 
-    !App(appPackage,appSignature),
-    Fr(~DebugKey)
-  ]
-  --[ RepackeApp(appPackage)]->
+rule CreateDeveloper:
   [
-    !App(appPackage,SelfsignAppSignature),
-    !GetDebugKey(~DebugKey,appPackage)
+    Fr(~developerSk),
+    Fr(~d_id)
+  ]
+  --[ DeveloperCreated(~d_id,~developerSk)]->
+  [
+    !GetDeveloperKey(~d_id,~developerSk)
   ]
 
 rule CreateApplication:
   let 
-      appPackage = 'appPackage'
-      apk = <appPackage,'sourcecode','resources'> 
-      appSignature = sign(apk,~DeveloperKey)
+      //appContent is an abstraction for application sourcecode and resources
+      appPackage = <~appPackageName,~appContent>
+      appSignature = sign(appPackage,developerSk)
   in
   [
-    Fr(~DeveloperKey)
+    Fr(~appContent),
+    Fr(~appPackageName),
+    !GetDeveloperKey(d_id,developerSk)
   ]
-  --[ CreateApp(appPackage)]->
+  --[ CreateApp(~appPackageName,~appContent,d_id)]->
   [
     !App(appPackage,appSignature),
-    !GetDeveloperKey(~DeveloperKey,appPackage)
+    !DeveloperApp(d_id,appPackage,appSignature)
   ]
 
-rule CreateAttestionServer:
+rule RepackProcess:
   let 
-    rootCertificate = create_certificate('TbsInfo',pk(~rootSk),~rootSk)
-  in
-  [
-    Fr(~rootSk)
+    repackedAppPackage = <appPackageName,~repackedContent>
+    selfsignAppSignature = sign(repackedAppPackage,debugSk)
+  in  
+  [ 
+    !App(<appPackageName,appContent>,appSignature),
+    Fr(~repackedContent),
+    In(debugSk)
   ]
-  --[]->
+  --[ RepackApp(appPackageName,appContent,~repackedContent)]->
   [
-    !GetRootCertificate(rootCertificate),
-    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+    !App(repackedAppPackage,selfsignAppSignature)
   ]
+
 
 rule CreateDevice:
   let 
-    software_measurement = 'valid' 
-    hardware_measurement = 'valid' 
-    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
-    certificateChain = <intermediateCertificate, rootCertificate>
-  in
+  software_measurement = 'valid' 
+  hardware_measurement = 'valid' in
   [ 
-    Fr(~keystoreSk),
-    Fr(~dev_id),
-    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
-    
+    Fr(~attestationKey)
   ]
-  --[ KeyGenerated(~rootSk)]->
+  --[ KeyGenerated(~attestationKey)]->
   [
-    !Device(~dev_id,~keystoreSk,software_measurement,hardware_measurement,certificateChain)
+    !Device(~attestationKey,software_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
 
-rule CreateUnlockedBootloaderDevice:
+rule UnlockBootloaderProcess:
   let 
-    hardware_measurement = 'invalid' 
-    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
-    certificateChain = <intermediateCertificate, rootCertificate>
-  in
+    updated_hardware_measurement = 'invalid' in
   [ 
-    Fr(~keystoreSk),
-    Fr(~dev_id),
     In(<fake_measurement>),
-    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+    !Device(attestationKey,software_measurement,hardware_measurement)
   ]
-  --[ KeyGenerated(~rootSk)]->
+  --[ BootloaderUnlocked(attestationKey)]->
   [
-    !Device(~dev_id,~keystoreSk,fake_measurement,hardware_measurement,certificateChain)
+    !Device(attestationKey,fake_measurement,updated_hardware_measurement)
   ]
-
 
 /* Protocol rules*/
+
+rule Dvr_to_App_1:
+    [
+      !GetDeveloperKey(d_id,developerSk),
+      Fr(~nonce)
+    ]
+  --[NonceGenerated(~nonce,d_id)]->
+    [ 
+      Out(~nonce),
+      DeveloperCreateNonce(~nonce,d_id)
+    ]
 
 rule App_to_SecW_2:
     [
       !App(appPackage,appSignature),
-      Fr(~app_id)
+      //create attestation session id (sid)
+      Fr(~sid),
+      Fr(~app_id),
+      In(nonceA)
     ]
-  --[ AppInstalled(~app_id, appPackage) ]->
+  --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
-      PrivateChannelB('secureChannel',<appPackage,appSignature,~app_id>),
-      SaveAppIntegritySession(~app_id,appPackage,appSignature)
+      PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
+      SaveAppStatus(~sid,~app_id,appPackage,appSignature)
     ]
 
 rule SecW_to_App3:
     let 
-      subjectCertificate = create_certificate(<software_measurement,hardware_measurement,appPackage,appSignature>,pk(~key),keystoreSk)
-      certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate>
+       blob = rep(<nonceSW,appPackageName,appSignature,software_measurement,~key>,<attestationKey,'Trustzone'>) 
     in
     [
-      PrivateChannelB('secureChannel',<appPackage,appSignature,app_id> ),
-      !Device(dev_id,keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
-      Fr(~key)
+      Fr(~dev_id),
+      Fr(~key),
+      PrivateChannelB('secureChannel', <sid,nonceSW,<appPackageName,appContent>,appSignature,app_id> ),
+      !Device(attestationKey,software_measurement,hardware_measurement)
       
     ]
-  --[CertificateChainGenerated(certificateChain,app_id,dev_id) ]->
+  --[BlobGenerated(blob,app_id,~dev_id)  ]->
     [ 
-      PrivateChannelC('secureChannel', <certificateChain>),
-      SaveDeviceIntegritySession(app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+      PrivateChannelC('secureChannel', <sid,blob>),
+      SaveDeviceStatus(sid,app_id,<appPackageName,appContent>,appSignature,software_measurement,hardware_measurement)
     ]
 
 rule App_to_Dvr4:
     [
-      PrivateChannelC('secureChannel',
-      
-       <
-                    <
-                     <software_measurement, hardware_measurement, appPackage,
-                      sign(<appPackage, 'sourcecode', 'resources'
-                           >,
-                           ~DebugKey)
-                     >,
-                     pk(~key),
-                     sign(<
-                           <'valid', 'valid', appPackage,
-                            sign(<appPackage, 'sourcecode', 'resources'
-                                 >,
-                                 ~DebugKey)
-                           >,
-                           pk(~key)>,
-                          ~keystoreSk)
-                    >,
-                    <'TbsKeyStoreInfo', pk(~keystoreSk),
-                     sign(<'TbsKeyStoreInfo', pk(~keystoreSk)>,
-                          ~rootSk)
-                    >,
-                    'TbsInfo', pk(~rootSk),
-                    sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)
-
-      
-      >),
+      PrivateChannelC('secureChannel',<sid,blob>),
       //Get app integrity check
-      SaveAppIntegritySession(app_id,appPackage,appSignature)
+      SaveAppStatus(sid,app_id,appPackage,appSignature)
     ]
-  --[ KeyReceieved(~rootSk) ]->
+  --[]->
     [ 
-      Out(<
-      
-      <
-                    <
-                     <software_measurement, hardware_measurement, appPackage,
-                      sign(<appPackage, 'sourcecode', 'resources'
-                           >,
-                           ~DebugKey)
-                     >,
-                     pk(~key),
-                     sign(<
-                           <'valid', 'valid', appPackage,
-                            sign(<appPackage, 'sourcecode', 'resources'
-                                 >,
-                                 ~DebugKey)
-                           >,
-                           pk(~key)>,
-                          ~keystoreSk)
-                    >,
-                    <'TbsKeyStoreInfo', pk(~keystoreSk),
-                     sign(<'TbsKeyStoreInfo', pk(~keystoreSk)>,
-                          ~rootSk)
-                    >,
-                    'TbsInfo', pk(~rootSk),
-                    sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)
-
-      
-      >
-
-      >)
+      Out(<blob>)
     ]
 
 
-rule Dvr_verification_5:
-    let 
-      //chain certificate verfication
-      verification1 = verify_certificate(subjectCertificate, intermediateCertificate)
-      verification2 = verify_certificate(intermediateCertificate, rootCertificate)
-      verification3 = verify_certificate(rootCertificate, rootCertificate)
-      tbsInfo = get_tbsInfo_certificate(subjectCertificate)
-    in
+
+rule Svr_to_Dvr_6:
     [
-      In(<<subjectCertificate, intermediateCertificate, rootCertificate>> ),
-      !GetRootCertificate(rootCertificate)
+      In(<rep(<nonceSW,appPackageName,appSignature,software_measurement,key>,<attestationKey,'Trustzone'>)> ),
+      !Server_SecureWorld(attestationKey)
     ]
-  --[Debug()]->
+  --[ Debug()]->
     [ 
-      PrivateChannelF('verification',<verification1,verification2,verification3,<tbsInfo>>)
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<nonceSW,appPackageName,appSignature,software_measurement,key>)
     ]
 
 rule Dvr_to_App_7:
-    let
-      apk = <appPackage,'sourcecode','resources'>
-    in
     [
-      !GetDeveloperKey(DeveloperKey,appPackage),
-      
-      PrivateChannelF('verification',<true,true,true,<'valid','valid',appPackage,sign(apk,DeveloperKey)>>),
+      !GetDeveloperKey(d_id,developerSk),
+      !DeveloperApp(d_id,<appPackageName,appContent>,appSignature),
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<nonceSW,appPackageName,sign(<appPackageName,appContent>,developerSk),'valid',key> ),
+      DeveloperCreateNonce(nonceSW,d_id),
       Fr(~secret)
     ]
-  --[ SecretGenerated(~secret),Debug2()]->
+  --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
     [ 
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<~secret>)
+      Out(aenc(~secret, key))
     ]
 
 rule App_from_Dvr_8:
     [
-      PrivateChannelG('HTTPS_DeveloperServer_APP',<secret>),
-      //Get Device integrity from attestation time
-      SaveDeviceIntegritySession(app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+      In(cipher)
     ]
-  --[ SecretReceived(secret),SecretRecievedByApp(app_id)]->
+  --[ SecretReceived(cipher)]->
     [
-      
+    
     ]
 
 
@@ -266,17 +187,15 @@ rule App_from_Dvr_8:
 //Reachability : Protocal can finish
 lemma Prove1: 
   exists-trace 
-  "Ex app_id appPackage  #i #j #k.
-      CreateApp(appPackage) @i
-      & AppInstalled(app_id,appPackage) @j
-      & SecretRecievedByApp(app_id) @k
+  "Ex app_id appPackageName appContent nonce d_id #i #j #k.
+      CreateApp(appPackageName,appContent,d_id) @i
+      & AppReceieveNonce(app_id,<appPackageName,appContent>, nonce) @j
+      & NonceReceived(nonce) @k
   "
 
-lemma Debug: exists-trace "Ex #i .Debug() @i "
-
-lemma Debug2: exists-trace "Ex #i .Debug2() @i "
 
 //Secret leacked
 lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
+lemma Debug: exists-trace "Ex #i.Debug() @i"
 end
