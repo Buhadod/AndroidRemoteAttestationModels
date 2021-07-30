@@ -124,7 +124,7 @@ rule App_to_SecW_2:
   --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
       PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
-      SaveAppIntegritySession(~sid,~app_id,appPackage,appSignature)
+      SaveAppStatus(~sid,~app_id,appPackage,appSignature)
     ]
 
 rule SecW_to_App3:
@@ -139,14 +139,14 @@ rule SecW_to_App3:
   --[BlobGenerated(blob,app_id,dev_id)  ]->
     [ 
       PrivateChannelC('secureChannel', <sid,blob>),
-      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+      SaveDeviceStatus(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
 
 rule App_to_Dvr4:
     [
       PrivateChannelC('secureChannel',<sid,blob>),
       //Get app integrity check
-      SaveAppIntegritySession(sid,app_id,appPackage,appSignature)
+      SaveAppStatus(sid,app_id,appPackage,appSignature)
     ]
   --[]->
     [ 
@@ -203,7 +203,7 @@ rule App_from_Dvr_8:
     [
       PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret, nonceSW>),
       //Get Device integrity from attestation time
-      SaveDeviceIntegritySession(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+      SaveDeviceStatus(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
   --[ SecretReceived(secret)]->
     [
