@@ -71,29 +71,25 @@ rule CreateDevice:
   software_measurement = 'valid' 
   hardware_measurement = 'valid' in
   [ 
-    Fr(~attestationKey),
-    Fr(~dev_id)
-    
+    Fr(~attestationKey)
   ]
-  --[ KeyGenerated(~attestationKey,~dev_id)]->
+  --[ KeyGenerated(~attestationKey)]->
   [
-    !Device(~dev_id,~attestationKey,software_measurement,hardware_measurement),
+    !Device(~attestationKey,software_measurement,hardware_measurement),
     !Server_SecureWorld(~attestationKey)
   ]
 
 
-rule CreateUnlockedBootloaderDevice:
+rule UnlockBootloaderProcess:
   let 
-    hardware_measurement = 'invalid' in
+    updated_hardware_measurement = 'invalid' in
   [ 
-    Fr(~attestationKey),
-    Fr(~dev_id),
-    In(<fake_measurement>)
+    In(<fake_measurement>),
+    !Device(attestationKey,software_measurement,hardware_measurement)
   ]
-  --[ KeyGenerated(~attestationKey,~dev_id)]->
+  --[ BootloaderUnlocked(attestationKey)]->
   [
-    !Device(~dev_id,~attestationKey,fake_measurement,hardware_measurement),
-    !Server_SecureWorld(~attestationKey)
+    !Device(attestationKey,fake_measurement,updated_hardware_measurement)
   ]
 
 /* Protocol rules*/
@@ -129,10 +125,11 @@ rule SecW_to_App3:
     in
     [
       PrivateChannelB('secureChannel', <sid,nonceSW,<appPackageName,appContent>,appSignature,app_id> ),
-      !Device(dev_id,attestationKey,software_measurement,hardware_measurement)
+      !Device(attestationKey,software_measurement,hardware_measurement),
+      Fr(~dev_id)
       
     ]
-  --[BlobGenerated(blob,app_id,dev_id)  ]->
+  --[BlobGenerated(blob,app_id,~dev_id)  ]->
     [ 
       PrivateChannelC('secureChannel', <sid,blob>),
       SaveDeviceStatus(sid,app_id,<appPackageName,appContent>,appSignature,software_measurement,hardware_measurement)

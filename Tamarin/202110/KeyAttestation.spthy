@@ -103,31 +103,26 @@ rule CreateDevice:
   in
   [ 
     Fr(~keystoreSk),
-    Fr(~dev_id),
     !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
     
   ]
-  --[ KeyGenerated(~rootSk,~dev_id)]->
+  --[ KeyGenerated(~keystoreSk)]->
   [
-    !Device(~dev_id,~keystoreSk,software_measurement,hardware_measurement,certificateChain)
+    !Device(~keystoreSk,software_measurement,hardware_measurement,certificateChain)
   ]
 
 
-rule CreateUnlockedBootloaderDevice:
+rule UnlockBootloaderProcess:
   let 
-    hardware_measurement = 'invalid' 
-    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
-    certificateChain = <intermediateCertificate, rootCertificate>
+    updated_hardware_measurement = 'invalid' 
   in
   [ 
-    Fr(~keystoreSk),
-    Fr(~dev_id),
     In(<fake_measurement>),
-    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+    !Device(keystoreSk,software_measurement,hardware_measurement,certificateChain)
   ]
-  --[ KeyGenerated(~rootSk,~dev_id)]->
+  --[ BootloaderUnlocked(keystoreSk)]->
   [
-    !Device(~dev_id,~keystoreSk,fake_measurement,hardware_measurement,certificateChain)
+    !Device(keystoreSk,fake_measurement,updated_hardware_measurement,certificateChain)
   ]
 
 
@@ -153,11 +148,12 @@ rule SecW_to_App3:
     in
     [
       PrivateChannelB('secureChannel', <sid,<appPackageName,appContent>,appSignature,app_id> ),
-      !Device(dev_id,keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
-      Fr(~key)
+      !Device(keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
+      Fr(~key),
+      Fr(~dev_id)
       
     ]
-  --[CertificateChainGenerated(certificateChain,app_id,dev_id) ]->
+  --[CertificateChainGenerated(certificateChain,app_id,~dev_id) ]->
     [ 
       PrivateChannelC('secureChannel', <sid,certificateChain>),
       SaveDeviceStatus(sid,app_id,<appPackageName,appContent>,appSignature,software_measurement,hardware_measurement)
