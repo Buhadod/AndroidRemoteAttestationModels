@@ -1,0 +1,1 @@
+docker exec -it tam_doc  tamarin-prover interactive  /root/tamarin/CodeProtectionModel/Tamarin/202110/.  --interface=*4 -p=8200

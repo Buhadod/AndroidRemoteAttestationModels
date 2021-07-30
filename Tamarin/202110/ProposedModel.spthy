@@ -1,0 +1,282 @@
+theory ProposedModel
+begin
+
+builtins: signing
+
+functions: 
+  create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+
+equations:
+    create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
+      = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
+
+    verify_certificate( 
+    < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+     , < IssuerTBSCertificateInfo, pk(IssuerSk), sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>,IssuerRootSk) >
+          ) = true,
+
+    get_tbsInfo_certificate( 
+        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+          ) = SubjectTBSCertificateInfo
+
+
+/*
+ * Protocol:     Code protection
+ * Modeler:      Code protection project
+ * Described in: 
+ *               
+ * Figure        
+ * Date:         July 2021
+ *
+ * Status:       on progress
+ */
+
+/* We formalize the following protocol
+
+
+
+*/
+
+
+/* Set up rules */
+rule RepackProcess:
+  let 
+    repackedApk = <appPackage,'sourcecode','resources'>
+    SelfsignAppSignature = sign( repackedApk,~DebugKey)
+  in  
+  [ 
+    !App(appPackage,appSignature),
+    Fr(~DebugKey)
+  ]
+  --[ RepackeApp(appPackage)]->
+  [
+    !App(appPackage,SelfsignAppSignature),
+    !GetDebugKey(~DebugKey,appPackage)
+  ]
+
+rule CreateApplication:
+  let 
+      appPackage = 'appPackage'
+      apk = <appPackage,'sourcecode','resources'> 
+      appSignature = sign(apk,~DeveloperKey)
+  in
+  [
+    Fr(~DeveloperKey)
+  ]
+  --[ CreateApp(appPackage)]->
+  [
+    !App(appPackage,appSignature),
+    !GetDeveloperKey(~DeveloperKey,appPackage)
+  ]
+
+rule CreateAttestionServer:
+  let 
+    rootCertificate = create_certificate('TbsInfo',pk(~rootSk),~rootSk)
+  in
+  [
+    Fr(~rootSk)
+  ]
+  --[]->
+  [
+    !GetRootCertificate(rootCertificate),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+  ]
+
+rule CreateDevice:
+  let 
+    software_measurement = 'valid' 
+    hardware_measurement = 'valid' 
+    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
+    certificateChain = <intermediateCertificate, rootCertificate>
+  in
+  [ 
+    Fr(~keystoreSk),
+    Fr(~dev_id),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+    
+  ]
+  --[ KeyGenerated(~rootSk)]->
+  [
+    !Device(~dev_id,~keystoreSk,software_measurement,hardware_measurement,certificateChain)
+  ]
+
+
+rule CreateUnlockedBootloaderDevice:
+  let 
+    hardware_measurement = 'invalid' 
+    intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keystoreSk),~rootSk)
+    certificateChain = <intermediateCertificate, rootCertificate>
+  in
+  [ 
+    Fr(~keystoreSk),
+    Fr(~dev_id),
+    In(<fake_measurement>),
+    !RequestCreatingIntermediateCertificate(~rootSk,rootCertificate)
+  ]
+  --[ KeyGenerated(~rootSk)]->
+  [
+    !Device(~dev_id,~keystoreSk,fake_measurement,hardware_measurement,certificateChain)
+  ]
+
+
+/* Protocol rules*/
+
+rule App_to_SecW_2:
+    [
+      !App(appPackage,appSignature),
+      Fr(~app_id)
+    ]
+  --[ AppInstalled(~app_id, appPackage) ]->
+    [ 
+      PrivateChannelB('secureChannel',<appPackage,appSignature,~app_id>),
+      SaveAppIntegritySession(~app_id,appPackage,appSignature)
+    ]
+
+rule SecW_to_App3:
+    let 
+      subjectCertificate = create_certificate(<software_measurement,hardware_measurement,appPackage,appSignature>,pk(~key),keystoreSk)
+      certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate>
+    in
+    [
+      PrivateChannelB('secureChannel',<appPackage,appSignature,app_id> ),
+      !Device(dev_id,keystoreSk,software_measurement,hardware_measurement,<intermediateCertificate,rootCertificate>),
+      Fr(~key)
+      
+    ]
+  --[CertificateChainGenerated(certificateChain,app_id,dev_id) ]->
+    [ 
+      PrivateChannelC('secureChannel', <certificateChain>),
+      SaveDeviceIntegritySession(app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+    ]
+
+rule App_to_Dvr4:
+    [
+      PrivateChannelC('secureChannel',
+      
+       <
+                    <
+                     <software_measurement, hardware_measurement, appPackage,
+                      sign(<appPackage, 'sourcecode', 'resources'
+                           >,
+                           ~DebugKey)
+                     >,
+                     pk(~key),
+                     sign(<
+                           <'valid', 'valid', appPackage,
+                            sign(<appPackage, 'sourcecode', 'resources'
+                                 >,
+                                 ~DebugKey)
+                           >,
+                           pk(~key)>,
+                          ~keystoreSk)
+                    >,
+                    <'TbsKeyStoreInfo', pk(~keystoreSk),
+                     sign(<'TbsKeyStoreInfo', pk(~keystoreSk)>,
+                          ~rootSk)
+                    >,
+                    'TbsInfo', pk(~rootSk),
+                    sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)
+
+      
+      >),
+      //Get app integrity check
+      SaveAppIntegritySession(app_id,appPackage,appSignature)
+    ]
+  --[ KeyReceieved(~rootSk) ]->
+    [ 
+      Out(<
+      
+      <
+                    <
+                     <software_measurement, hardware_measurement, appPackage,
+                      sign(<appPackage, 'sourcecode', 'resources'
+                           >,
+                           ~DebugKey)
+                     >,
+                     pk(~key),
+                     sign(<
+                           <'valid', 'valid', appPackage,
+                            sign(<appPackage, 'sourcecode', 'resources'
+                                 >,
+                                 ~DebugKey)
+                           >,
+                           pk(~key)>,
+                          ~keystoreSk)
+                    >,
+                    <'TbsKeyStoreInfo', pk(~keystoreSk),
+                     sign(<'TbsKeyStoreInfo', pk(~keystoreSk)>,
+                          ~rootSk)
+                    >,
+                    'TbsInfo', pk(~rootSk),
+                    sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)
+
+      
+      >
+
+      >)
+    ]
+
+
+rule Dvr_verification_5:
+    let 
+      //chain certificate verfication
+      verification1 = verify_certificate(subjectCertificate, intermediateCertificate)
+      verification2 = verify_certificate(intermediateCertificate, rootCertificate)
+      verification3 = verify_certificate(rootCertificate, rootCertificate)
+      tbsInfo = get_tbsInfo_certificate(subjectCertificate)
+    in
+    [
+      In(<<subjectCertificate, intermediateCertificate, rootCertificate>> ),
+      !GetRootCertificate(rootCertificate)
+    ]
+  --[Debug()]->
+    [ 
+      PrivateChannelF('verification',<verification1,verification2,verification3,<tbsInfo>>)
+    ]
+
+rule Dvr_to_App_7:
+    let
+      apk = <appPackage,'sourcecode','resources'>
+    in
+    [
+      !GetDeveloperKey(DeveloperKey,appPackage),
+      
+      PrivateChannelF('verification',<true,true,true,<'valid','valid',appPackage,sign(apk,DeveloperKey)>>),
+      Fr(~secret)
+    ]
+  --[ SecretGenerated(~secret),Debug2()]->
+    [ 
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<~secret>)
+    ]
+
+rule App_from_Dvr_8:
+    [
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<secret>),
+      //Get Device integrity from attestation time
+      SaveDeviceIntegritySession(app_id,appPackage,appSignature,software_measurement,hardware_measurement)
+    ]
+  --[ SecretReceived(secret),SecretRecievedByApp(app_id)]->
+    [
+      
+    ]
+
+
+
+
+//Reachability : Protocal can finish
+lemma Prove1: 
+  exists-trace 
+  "Ex app_id appPackage  #i #j #k.
+      CreateApp(appPackage) @i
+      & AppInstalled(app_id,appPackage) @j
+      & SecretRecievedByApp(app_id) @k
+  "
+
+lemma Debug: exists-trace "Ex #i .Debug() @i "
+
+lemma Debug2: exists-trace "Ex #i .Debug2() @i "
+
+//Secret leacked
+lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
+
+end
