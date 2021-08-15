@@ -99,7 +99,7 @@ rule Dvr_to_App_1:
       !GetDeveloperKey(d_id,developerSk),
       Fr(~nonce)
     ]
-  --[NonceGenerated(~nonce,d_id)]->
+  --[GeneratedNonce(~nonce)]->
     [ 
       Out(~nonce),
       DeveloperCreateNonce(~nonce,d_id)
@@ -113,7 +113,7 @@ rule App_to_SecW_2:
       Fr(~app_id),
       In(nonceA)
     ]
-  --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
+  --[ AppReceieveNonce(~app_id, appPackage,nonceA)]->
     [ 
       PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
       SaveAppStatus(~sid,~app_id,appPackage,appSignature)
@@ -130,7 +130,7 @@ rule SecW_to_App3:
       !Device(attestationKey,software_measurement,hardware_measurement)
       
     ]
-  --[BlobGenerated(blob,app_id,~dev_id)  ]->
+  --[BlobGenerated(blob,app_id,~dev_id) , GeneratedKey(~key) ]->
     [ 
       PrivateChannelC('secureChannel', <sid,blob>),
       SaveDeviceStatus(sid,app_id,<appPackageName,appContent>,appSignature,software_measurement,hardware_measurement)
@@ -148,26 +148,16 @@ rule App_to_Dvr4:
     ]
 
 
-
-rule Svr_to_Dvr_6:
-    [
-      In(<rep(<nonceSW,appPackageName,appSignature,software_measurement,key>,<attestationKey,'Trustzone'>)> ),
-      !Server_SecureWorld(attestationKey)
-    ]
-  --[ Debug()]->
-    [ 
-      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<nonceSW,appPackageName,appSignature,software_measurement,key>)
-    ]
-
 rule Dvr_to_App_7:
     [
+      In(<rep(<nonceSW,appPackageName,appSignature,software_measurement,key>,<attestationKey,'Trustzone'>)> ),
+      !Server_SecureWorld(attestationKey),
       !GetDeveloperKey(d_id,developerSk),
       !DeveloperApp(d_id,<appPackageName,appContent>,appSignature),
-      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<nonceSW,appPackageName,sign(<appPackageName,appContent>,developerSk),'valid',key> ),
       DeveloperCreateNonce(nonceSW,d_id),
       Fr(~secret)
     ]
-  --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
+  --[ SecretGenerated(~secret), Debug2(),  NonceReceived(nonceSW) , Debug()]->
     [ 
       Out(aenc(~secret, key))
     ]
@@ -180,6 +170,7 @@ rule App_from_Dvr_8:
     [
     
     ]
+
 
 
 
