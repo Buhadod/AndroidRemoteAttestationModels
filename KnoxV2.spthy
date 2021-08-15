@@ -1,222 +1,246 @@
 theory KnoxV2
 begin
 
-builtins: asymmetric-encryption, signing
+builtins: signing
+
+functions: check_rep/2,  get_rep/1, rep/2 [private]
+
+equations:
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1
+
+
+/*
+ * Protocol:     KnoxV2
+ * Modeler:      Code protection project
+ * Described in: https://developer.android.com/training/safetynet/attestation
+ * Figure        Based on figures/a.pdf
+ * Date:         July 2021
+ *
+ * Status:       working
+ */
 
 /* We formalize the following protocol
 
-    1. Vender -> Developer   : N_v, apikey
-    2. Developer -> App      : N_v, apikey
-    3. App -> SecWorld       : N_v
-    4. SecWorld -> App       : statement = <N_s, measurement, deviceID>, E_venderPubKey(Sign_secWorldSignKey(Stmt),Stmt) i.e (blob)
-    5. App -> Developer      : blob, N_s, apikey
-    6. Developer -> Vender   : blob, N_s, apikey
-    7. Vender -> Developer   : statement
-    8. Developer -> App      : secret
-*/
-
-/*
-  Assumiption:
-  
 
 */
 
-/* Set up rules */
-rule CreateVender:
-  [ 
-    Fr(~venderPrivKey)
-  ]
-  --[ ]->
+
+
+rule CreateDeveloper:
   [
-    !VenderKeys(~venderPrivKey, pk(~venderPrivKey)),
-    !VenderInfo(pk(~venderPrivKey))
+    Fr(~developerSk),
+    Fr(~d_id)
+  ]
+  --[ DeveloperCreated(~d_id,~developerSk)]->
+  [
+    !GetDeveloperKey(~d_id,~developerSk)
   ]
 
-rule VenderComprimse:
-  [ 
-    !VenderKeys(venderPrivKey, venderPubKey)
-  ]
-  --[ VenderComprimsed(venderPubKey) ]->
+rule CreateApplication:
+  let 
+      //appContent is an abstraction for application sourcecode and resources
+      appPackage = <~appPackageName,~appContent>
+      appSignature = sign(appPackage,developerSk)
+  in
   [
-    Out(<venderPrivKey, venderPubKey>)
+    Fr(~appContent),
+    Fr(~appPackageName),
+    !GetDeveloperKey(d_id,developerSk)
+  ]
+  --[ CreateApp(~appPackageName,~appContent,d_id)]->
+  [
+    !App(appPackage,appSignature),
+    !DeveloperApp(d_id,appPackage,appSignature)
+  ]
+
+rule RepackProcess:
+  let 
+    repackedAppPackage = <appPackageName,~repackedContent>
+    selfsignAppSignature = sign(repackedAppPackage,debugSk)
+  in  
+  [ 
+    !App(<appPackageName,appContent>,appSignature),
+    Fr(~repackedContent),
+    In(debugSk)
+  ]
+  --[ RepackApp(appPackageName,appContent,~repackedContent)]->
+  [
+    !App(repackedAppPackage,selfsignAppSignature)
   ]
 
 rule CreateDevice:
+  let 
+  software_measurement = 'valid' 
+  hardware_measurement = 'valid' in
   [ 
-    Fr(~deviceID), Fr(~secWorldSignKey),
-    !VenderKeys(venderPrivKey, venderPubKey)
+    Fr(~attestationKey)
   ]
-  --[ ]->
+  --[ KeyGenerated(~attestationKey)]->
   [
-    !SecureWorldInfo(~deviceID,venderPubKey,~secWorldSignKey),
-    !VenderDevicesInfo(venderPrivKey, ~secWorldSignKey, ~deviceID) 
+    !Device(~attestationKey,software_measurement,hardware_measurement),
+    !Server_SecureWorld(~attestationKey)
   ]
 
-rule SecWorldComprimse:
+
+rule UnlockBootloaderProcess:
+  let 
+    updated_hardware_measurement = 'invalid' in
   [ 
-    !SecureWorldInfo(deviceID,venderPubKey,~secWorldSignKey)
+    In(<fake_measurement>),
+    !Device(attestationKey,software_measurement,hardware_measurement)
   ]
-  --[ SecWorldComprimsed(deviceID) ]->
+  --[ BootloaderUnlocked(attestationKey)]->
   [
-    Out(<deviceID>)
+    !Device(attestationKey,fake_measurement,updated_hardware_measurement)
   ]
-
-  rule CreateDeveloper:
-  [ 
-    Fr(~apiKey),
-    !VenderInfo(venderPupKey)
-  ]
-  --[ ]->
-  [
-    !DeveloperInfo(venderPupKey, ~apiKey), 
-    !VenderDeveloperInfo(venderPupKey, ~apiKey)
-  ]
-
-rule DevComprimse:
-  [ 
-    !DeveloperInfo(venderPupKey, apiKey)
-  ]
-  --[ DevComprimsed(apiKey) ]->
-  [
-     Out(<apiKey>)
-  ]
-
-
-  rule CreateApp:
-  [
-    Fr(~appSHA), Fr(~secret),
-    !DeveloperInfo(venderPupKey, apiKey)
-  ]
-  --[ ]->
-  [
-    !AppInfo(~appSHA,~secret, apiKey)
-  ]
-
-/* Installation rules*/
-
-rule Install_App_in_Device:
-  [
-    !AppInfo(appSHA,secret, apiKey),
-    !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
-  ]
-  --[ Install_App_in_Device(appSHA,secret, apiKey, deviceID)]->
-  [
-      !AppInfo(appSHA, apiKey, deviceID)
-  ]
-
 
 /* Protocol rules*/
-rule Ven_to_Dev_1:
+
+rule Dvr_to_App_1:
     [
-      Fr(~nv),
-      !VenderDeveloperInfo(venderPupKey, apiKey)
+      !GetDeveloperKey(d_id,developerSk),
+      Fr(~nonce)
     ]
-  --[ 
-       St_Vendor_to_Developer_1(~nv, apiKey)
-    ]->
+  --[NonceGenerated(~nonce,d_id)]->
     [ 
-      Out( <~nv, apiKey> )
+      PrivateChannelA('HTTPS_DeveloperServer_APP', ~nonce),
+      DeveloperCreateNonce(~nonce,d_id)
     ]
 
-rule Dev_to_App_2:
+rule App_to_SecW_2:
     [
-      In(<nv, apiKey>),
-      !DeveloperInfo(venderPupKey, apiKey)
+      !App(appPackage,appSignature),
+      //create attestation session id (sid)
+      Fr(~sid),
+      Fr(~app_id),
+      PrivateChannelA('HTTPS_DeveloperServer_APP', nonceA )
     ]
-  --[ 
-      St_Developer_to_App_2(nv, apiKey)
-    ]->
+  --[ AppReceieveNonce(~app_id, appPackage,nonceA) ]->
     [ 
-      Out( <nv,apiKey> )
+      PrivateChannelB('secureChannel',<~sid,nonceA,appPackage,appSignature,~app_id>),
+      SaveAppStatus(~sid,~app_id,appPackage,appSignature)
     ]
 
-rule App_to_SecWorld_3:
-    [
-      In(<nv,apiKey>),
-      !AppInfo(appSHA, apiKey, deviceID)
-    ]
-  --[ 
-      St_App_to_SecWorld_3(nv, appSHA, apiKey, deviceID)
-    ]->
-    [ 
-      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID)
-    ]
-
-rule SecWorld_to_App_4:
-    
-    let blob = aenc(sign (<'NotRooted',nv, deviceID>,secWorldSignKey), venderPubKey)
-
+rule SecW_to_App3:
+    let 
+       blob = rep(<nonceSW,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>) 
     in
     [
-      !Secure_Channel_App_to_SecWorld(nv, appSHA, deviceID),
-      !SecureWorldInfo(deviceID,venderPubKey,secWorldSignKey)
+      PrivateChannelB('secureChannel', <sid,nonceSW,appPackage,appSignature,app_id> ),
+      !Device(attestationKey,software_measurement,hardware_measurement),
+      Fr(~dev_id)
+      
     ]
-  --[ 
-      St_SecWorld_to_App_4(blob)
-    ]->
+  --[BlobGenerated(blob,app_id,~dev_id)  ]->
     [ 
-      !SecWorld_to_App(blob)
+      PrivateChannelC('secureChannel', <sid,blob>),
+      SaveDeviceStatus(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
 
-rule App_to_Dev_5:
+rule App_to_Dvr4:
     [
-      !SecWorld_to_App(blob),
-      !AppInfo_2(nv, appSHA, apiKey)
+      PrivateChannelC('secureChannel',<sid,blob>),
+      //Get app integrity check
+      SaveAppStatus(sid,app_id,appPackage,appSignature)
     ]
-  --[ 
-      St_App_to_Dev_5(nv, blob, appSHA,apiKey)
-    ]->
+  --[]->
     [ 
-      Out(<blob, nv, apiKey>)
+      PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,blob>),
+      
+      LeakBlobIfAppRepacked(sid,app_id,appPackage,appSignature,blob)
     ]
 
-rule Dev_to_Ven_6:
+rule App_to_Dvr4_Leakage:
+  [
+    //retrive debug key
+    In(debugSk),
+    //check if the app selfsigned/repacked
+    LeakBlobIfAppRepacked(sid,app_id,<appPackageName,appContent>,sign(<appPackageName,appContent>,debugSk),blob)
+  ]
+  --[BlobLeaked(blob,app_id)]->
+  [
+    //create partial deconstruction and no needed
+    //Out(blob)
+  ]
+
+rule Dvr_to_Svr_5:
+  [
+    PrivateChannelD('HTTPS_DeveloperServer_APP',<sid,blob>)
+  ]
+  --[]->
+  [
+    PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,blob>)
+  ]
+
+
+rule Svr_to_Dvr_6:
     [
-      In(<blob, nv, apiKey>),
-      !Developer_to_App(nv,apiKey)
+      PrivateChannelE('HTTPS_DeveloperServer_AttestationServer',<sid,rep(<nonceSW,software_measurement,hardware_measurement>,<attestationKey,'Trustzone'>)> ),
+      !Server_SecureWorld(attestationKey)
     ]
-  --[ 
-      St_App_to_Dev_6(nv, blob,apiKey)
-    ]->
+  --[Debug()]->
     [ 
-      Out(<blob, nv, apiKey>)
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,software_measurement,hardware_measurement>)
     ]
 
-rule Ven_to_Dev_7:
-    
-    let blob = aenc(sign (<'NotRooted',nv, deviceID>,secWorldSignKey), venderPubKey)
-
-    in
+rule Dvr_to_App_7:
     [
-      In(<blob, nv, apiKey>),
-      !VenderDeveloperInfo(venderPubKey, apiKey),
-      !VenderKeys(venderPrivKey, venderPubKey),
-      !VenderDevicesInfo(venderPrivKey, secWorldSignKey, deviceID) 
+      PrivateChannelF('HTTPS_DeveloperServer_AttestationServer',<sid,nonceSW,'valid',hardware_measurement> ),
+      DeveloperCreateNonce(nonceSW,d_id),
+      Fr(~secret)
     ]
-  --[ 
-      St_Ven_to_Dev_7('NotRooted',blob, nv, deviceID)
-    ]->
+  --[ NonceReceived(nonceSW), SecretGenerated(~secret), Debug2()]->
     [ 
-      Out(<'NotRooted',nv, deviceID, apiKey>)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,~secret, nonceSW>)
     ]
 
-rule Dev_to_App_8:
+rule App_from_Dvr_8:
     [
-      In(<'NotRooted',nv, deviceID, apiKey>),
-      !AppInfo(appSHA,secret, apiKey),
-      !DeveloperInfo(venderPupKey, apiKey)
+      PrivateChannelG('HTTPS_DeveloperServer_APP',<sid,secret, nonceSW>),
+      //Get Device integrity from attestation time
+      SaveDeviceStatus(sid,app_id,appPackage,appSignature,software_measurement,hardware_measurement)
     ]
-  --[ 
-      St_Dev_to_App_8(nv, apiKey, secret)
-    ]->
-    [ 
-      Out(<secret,apiKey>)
+  --[ SecretReceived(secret)]->
+    [
+      LeakSecretIfAppRepacked(appPackage,appSignature,secret),
+      LeakSecretIfDeviceCompomised(hardware_measurement,secret)
     ]
 
+rule App_from_Svr8_If_Leakage_via_app_repack:
+    [
+      //retrive debug key
+      In(debugSk),
+      //check if the app selfsigned
+      LeakSecretIfAppRepacked(<appPackageName,appContent>,sign(<appPackageName,appContent>,debugSk),secret)
+    ]
+  --[ SecretLeaked(secret)]->
+    [
+      Out(secret)
+    ]
 
-lemma executable:
+rule App_from_Svr8_If_Leakage_via_device_compomised:
+    [
+      LeakSecretIfDeviceCompomised('invalid',secret)
+    ]
+  --[ SecretLeaked(secret)]->
+    [
+      Out(secret)
+    ]
+
+lemma Debug: exists-trace "Ex #i . Debug2()@i" 
+
+//Reachability : Protocal can finish
+lemma Prove1: 
   exists-trace 
-  " Ex #i nv apiKey secret.
-      St_Dev_to_App_8(nv, apiKey, secret) @ i "
+  "Ex app_id appPackageName appContent nonce d_id #i #j #k.
+      CreateApp(appPackageName,appContent,d_id) @i
+      & AppReceieveNonce(app_id,<appPackageName,appContent>, nonce) @j
+      & NonceReceived(nonce) @k
+  "
+
+
+//Secret leacked
+lemma Prove2: "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
 end

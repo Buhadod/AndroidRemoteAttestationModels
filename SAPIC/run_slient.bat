@@ -1,1 +1,0 @@
-docker exec -it tam_doc  tamarin-prover --prove  /root/tamarin/CodeProtectionModel/SAPIC/safetynet2.sapic
