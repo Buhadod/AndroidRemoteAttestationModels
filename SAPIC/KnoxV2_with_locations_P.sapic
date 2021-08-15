@@ -28,71 +28,88 @@ let SecureWorld =
     
     !(
         in(nonceSW);
-
-        (
-            lock <'device', ~id>;
+       
+        
+        lock <'device', ~id>;
+        new ~blob;
+        out(~secureChannel,<~id, ~blob>);
+        unlock <'device', ~id>;
+        event Debug2();
+        0
+        /*
+       (
+            //lock <'device', ~id>;
             lookup <'device', ~id> as measurement in
             let blob = report(<~id, measurement, nonceSW>) in
             
-            event ReceivedID(~id);
-            event GeneratedBlob(blob);
-            out (~secureChannel,<~id, blob>);
-           
-            unlock <'device', ~id>;
+            //event ReceivedID(~id);
+            //event GeneratedBlob(blob);
+            //out(~secureChannel,<~id, blob>);
+            //event Debug2();
+            //unlock <'device', ~id>;
             0
         )@<'TrustZone', ~id>
-        
+        */
+       
     )
  
 let RepackedApp =
     
-   
     event RepackedAppStarts(~id);
     in(~deviceChannel, nonceRA);
 
     event ReceivedNonce(nonceRA);
+    
     out(nonceRA);
     
+      
     
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
-    event Debug2();
-     
+   
+
     out(~deviceChannel, <~id, blob>);
-    
+    event Debug1();
+    0
+    /*
     
     in(~deviceChannel, secret);
     event RepackedAppReceives(secret);
     event Debug2();
     0
-
+*/
 let YourApp =
     
     event YourAppStarts(~id);
     in(~deviceChannel, nonceA);
-    
+
     event ReceivedNonce(nonceA);
+
     out(nonceA);
     
-
+    
+    //event Debug1();
+    0
+    /*
     in(~secureChannel,<~id, blob>);
     event ReceivedBlob(blob);
     
-    
     out(~deviceChannel, <~id, blob>);
-    event Debug1();
     
     in(~deviceChannel, secret);
     event YourAppReceives(secret); 
-
-    0
+*/
+    
 
 let Device =    
     new ~id;
     event GenerateID(~id);
-    //out(~id);
     insert <'device', ~id>, 'nonRooted';
-    (!SecureWorld | !(YourApp + RepackedApp))
+    (!SecureWorld| !RepackedApp | !YourApp)
+    
+    //out(~id);
+
+    
 
 
 
@@ -102,13 +119,14 @@ let YourServer =
         in(~serverChannel, nonce);
 
         out(~deviceChannel, nonce);
-        
+    
         
         in(~deviceChannel, <id, blob>);
-        event ReceivedBlob(blob);
-        
+        //event ReceivedBlob(blob);
         event Debug3();
-
+        
+       0
+        /*
         out(~serverChannel, <id, blob>);
         
         in(~serverChannel, veredict);
@@ -121,6 +139,8 @@ let YourServer =
         else
             event VeredictNoOK(id)
     
+    */
+    
     )
 
 let AttestServer =
@@ -128,9 +148,11 @@ let AttestServer =
         new ~nonce;
         event GeneratedNonce(~nonce);
         out(~serverChannel, ~nonce);
-        
+        0
+        /*
         in(~serverChannel, <id, blob>);
         
+        event Debug4();
         
         if <id, 'nonRooted', ~nonce> = check_rep(blob, <'TrustZone', id>) then
             event AttestServerVeredictOk(id);
@@ -139,7 +161,7 @@ let AttestServer =
             event AttestServerVeredictNotOk(id);
             out(~serverChannel, <id, 'veredictNotOK'>)
         
-        
+        */
     )
 
 
@@ -162,6 +184,19 @@ lemma types [sources]:
                 | (Ex #j. GeneratedNonce( nonce ) @ j)
             )
     )"
+/*
+lemma typesSW [sources]:
+    " 
+    (All nonce #i.
+       ReceivedNonceSW(nonce) @ i
+        ==>
+            ( 
+                (Ex #j. KU(nonce) @ j & j < i)
+                | (Ex #j. GeneratedNonceSW( nonce ) @ j)
+            )
+    )"
+*/
+
     /*
 lemma types2 [sources]:
    "(All id #i.
@@ -187,9 +222,10 @@ lemma types3 [sources]:
 
 
 
-lemma Debug1: exists-trace "Ex #i. Debug1()@i"
-lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+//lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+//lemma Debug2: exists-trace "Ex #i. Debug2()@i"
 lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+//lemma Debug4: exists-trace "Ex #i. Debug4()@i"
 
 
 

@@ -1,0 +1,148 @@
+theory Safetynet2
+begin
+
+builtins:
+    locations-report,
+    symmetric-encryption
+
+let RootStatusManager =
+    in(status);
+    insert 'device', 'rooted';
+    event DeviceStatus(status);
+    0
+
+let PlayService =
+    !(
+        in(~secureChannel,<nonceSW,appSignature>);
+        
+        lookup <'device'> as measurement in
+
+        if 'valid' = measurement then
+            let blob = senc(~key,<nonceSW,appSignature,'verdict_OK'>) in
+            out(~secureChannel2,blob);
+            0
+        else
+            let blob = senc(~key,<nonceSW, appSignature,'verdict_INVALID'>) in
+            out(~secureChannel2,blob);
+            out(<~key,nonceSW,appSignature,'verdict_INVALID',blob>);
+            0
+            
+        
+    )
+ 
+let YourApp =
+    !(
+
+        //lookup 'app' as appSignature in
+
+        event RepackedAppStarts(~id);
+        in(~deviceChannel, nonceA);
+
+        event Debug1A();
+        event ReceivedNonce(nonceA);
+        
+        out(~secureChannel,<nonceA,~appSignature>);
+        
+        in(~secureChannel2,blobA);
+        event Debug2A();
+
+        out(~deviceChannel2, blobA);
+        
+        in(~deviceChannel3, secretA);
+        event AppReceives(secretA);
+        event Debug3A();
+        
+
+        0
+
+    )
+
+let RepackedApp =
+
+    !(
+        //lookup 'app' as  appSignature in
+
+        in(~deviceChannel, nonceRA);
+
+        out(~secureChannel,<nonceRA,~appSignature>);
+        
+        in(~secureChannel2,blob);
+        
+        in(<key,nonceSW,~appSignature,verdict,blobx>);
+        
+        let blobRA = senc(key,<nonceRA,~appSignature,'verdict_OK'>)
+        
+        event Debug2();
+
+        out(~deviceChannel2, blobRA);
+        
+        in(~deviceChannel3, secretRA);
+        event RepackedAppReceives(secretRA);
+        event Debug3();
+        
+
+        0
+
+    )
+    
+
+let Server = 
+    //new ~appSignature;
+    new ~appPackage;
+    //insert 'app',  ~appSignature;
+
+    !(
+         
+        new ~nonce;
+        new ~secret;
+        event GeneratedNonce(~nonce);
+
+        out(~deviceChannel, ~nonce);
+       
+        in(~deviceChannel2,senc(~key,<~nonce,~appSignature,'verdict_OK'>);
+
+        if <~nonce, ~appSignature,veredict> = <~nonce, ~appSignature,'verdict_OK'> then
+            event Debug4();
+            out(~deviceChannel3, ~secret)
+        else
+            event Debug5();
+        
+        
+        0
+        //out(~serverChannel3, <id, 'veredictOK'>);
+       
+    )
+
+
+
+new ~deviceChannel;
+new ~deviceChannel2;
+new ~deviceChannel3;
+
+new ~secureChannel;
+new ~secureChannel2;
+
+new ~appSignature;
+
+new ~key;
+new ~id;
+
+insert 'device', 'valid';
+
+(!Server |!PlayService| !RepackedApp )
+
+
+lemma Debug1: exists-trace "Ex #i. Debug1()@i"
+lemma Debug2: exists-trace "Ex #i. Debug2()@i"
+lemma Debug3: exists-trace "Ex #i. Debug3()@i"
+/*
+lemma Debug1A: exists-trace "Ex #i. Debug1A()@i"
+lemma Debug2A: exists-trace "Ex #i. Debug2A()@i"
+lemma Debug3A: exists-trace "Ex #i. Debug3A()@i"
+*/
+lemma Debug4: exists-trace "Ex #i. Debug4()@i"
+lemma Debug5: exists-trace "Ex #i. Debug5()@i"
+    
+end
+
+

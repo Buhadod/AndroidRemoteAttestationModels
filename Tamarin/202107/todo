@@ -1,0 +1,16 @@
+add nonoce check at server
+
+knox v2: secret leaked by repacked app only
+keep https connection only (private channel only)
+repacke
+
+Fixes:
+
+KnoxV2:
+    leak secret via repack app only. keep blob leaked and write lemma to cecek leakae.
+
+
+SafetyNet > 
+    add maleware process zat inject secureworld from private cannel wit fake stuff.
+    repake app can leak secret at te end
+    

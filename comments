@@ -1,0 +1,13 @@
+insert <'channel', id>, message
+
+lookup
+
+out(id, xxxxxx)
+
+out(id)
+
+//output
+[]--[]-> [AbdullahOutput(message)];
+
+//input
+[AbdullahOutput(message)]--[]-> [];
