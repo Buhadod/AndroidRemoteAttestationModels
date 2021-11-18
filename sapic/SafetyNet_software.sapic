@@ -88,10 +88,10 @@ let App =
 		new ~ask;
 
 		//request a nonce from the developer server
-		out(aenc(dvpk,<~ask>));
+		out(aenc(dvpk,<'nonce_request',~ask>));
 
 		//retreive a nonoce from the developer server
-		in(aenc(~ask,nonce));
+		in(aenc(~ask,<'nonce_response',nonce>));
 
 		//create a android intent session id, to keep track of the intent session during cominication with attestation agent in the TEE 
 		new ~asid;
@@ -103,10 +103,10 @@ let App =
 		[AndroidIntentFRSW(~asid,deviceId,blob)]--[]-> [];
 
 		//send the blob to the developer server 
-		out(aenc(dvpk,<~ask,blob>));
+		out(aenc(dvpk,<'blob_request',~ask,blob>));
 
 		//retrive the secret from the developer server as a response from sending blob
-		in(aenc(~ask,secret));
+		in(aenc(~ask,<'blob_response',secret>));
 
 		event SecretReceived(secret);
 
@@ -154,13 +154,13 @@ let DevServer =
 		// create a nonce
 		new ~nonce;
 		// retrive clients' session key
-		in(aenc(dbpk,<ask>));
+		in(aenc(dbpk,<'nonce_request',ask>));
 		//send nonce to to clients encrypted with their session key
-		out(aenc(ask,~nonce));
+		out(aenc(ask,<'nonce_response',~nonce>));
 
 
 		//retrive blob from clients
-		in(aenc(dbpk,<ask,blob>));
+		in(aenc(dbpk,<'blob_request',ask,blob>));
 
 
 		//create developer-attesation server session id, to keep track or pair of request-response message  
@@ -168,11 +168,10 @@ let DevServer =
 		//send blob to the attestation server
 		[]--[]-> [TOAT(~sid,blob)];
 		//retreive the verfied report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<'valid',~nonce,~packagename,appSignatureX, deviceId>)]--[]-> [];
+		[FRAT(~sid,<'valid',~nonce,~packagename,appSignature, deviceId>)]--[]-> [];
 
-		//send secret if verdict contain a valid device status
-		if (appSignatureX = appSignature ) then
-			out(aenc(ask,~secret));
+		
+		out(aenc(ask,<'blob_response',~secret>));
 
 		event D_finish() 
 	)
