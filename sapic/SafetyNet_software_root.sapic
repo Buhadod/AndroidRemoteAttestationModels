@@ -34,13 +34,6 @@ equations:
     check_rep(rep(x.1, x.2), x.2) = true,
     get_rep(rep(x.1, x.2)) = x.1
 
-let DeviceTamper =
-    in(deviceId);
-    lock <'device', deviceId>;
-    insert <'device', deviceId>, <'valid','invalid'>;
-    event DeviceTampered(deviceId);
-    unlock <'device',deviceId>;
-    0
       
 
 let SecureWorld =
@@ -48,29 +41,27 @@ let SecureWorld =
 	//Create device reference
 	new ~deviceId;
 
-	// intitate the device status with valid state
-    insert <'device', ~deviceId>, <'valid','valid'>;
-
-	//send the device refernece , allows an advsery to tamper the device
-	out(~deviceId);
+	in(status);
 
 	!(
-		//lock the device before starting the protocol, as unlocking bootloader reqiure rebooting
-		//lock <'device', ~deviceId>;
 
+			
 		//recieve nonce from the App
 		[AndroidIntentTOSW(asid,nonce,packagename,appSignature)]--[]-> [];
 
-		//create attestation report
-		lookup <'device', ~deviceId> as measurement in
-		let softwareMeasurement = fst(measurement) in
-		let hardwareMeasurement = snd(measurement) in
-		let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+
+		let blob = rep(<'valid',nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
 	
 		//send attestation report to the app
 		[]--[]-> [AndroidIntentFRSW(asid,~deviceId,blob)];
-		event S_finish()
+		event S_finish();
 		
+		if (status='valid') then
+			event Rooted();
+			0
+		else
+			event Unrooted();
+			0
 	)
 
 let App =
@@ -197,7 +188,7 @@ new ~skAT;
 let pkAT = pk(~skAT) in
 
 
-(!SecureWorld ||!App || !DevServer || AtServer || DeviceTamper)
+(!SecureWorld ||!App || !DevServer || AtServer )
 
 lemma types [sources]:
 	"(All secret #i. SecretReceived(secret) @ i ==> 
