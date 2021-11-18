@@ -23,7 +23,7 @@
 	
 *******************************************************************************/
 
-theory SafetyNet_s
+theory SafetyNet_H
 begin
 
 builtins: signing, asymmetric-encryption
@@ -55,7 +55,7 @@ let SecureWorld =
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
 			event S_finish();
@@ -63,7 +63,7 @@ let SecureWorld =
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
 			event S_finish()
@@ -180,10 +180,10 @@ let AtServer =
 	!(
 
 		//retrive the blob from the developer server and verfiy it
-        [TOAT(sid,rep(<softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+        [TOAT(sid,rep(<hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <softwareMeasurement,nonce,packagename,appSignature, deviceId> in
+		let verdict = <hardwareMeasurement,nonce,packagename,appSignature, deviceId> in
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
