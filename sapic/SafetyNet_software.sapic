@@ -34,13 +34,7 @@ equations:
     check_rep(rep(x.1, x.2), x.2) = true,
     get_rep(rep(x.1, x.2)) = x.1
 
-let DeviceTamper =
-    in(deviceId);
-    lock <'device', deviceId>;
-    insert <'device', deviceId>, <'valid','invalid'>;
-    event DeviceTampered(deviceId);
-    unlock <'device',deviceId>;
-    0
+
       
 
 let SecureWorld =
@@ -48,28 +42,31 @@ let SecureWorld =
 	//Create device reference
 	new ~deviceId;
 
-	// intitate the device status with valid state
-    insert <'device', ~deviceId>, <'valid','valid'>;
+	//receive an adversary's attempt to compomised the device
+	in(status);
 
 	//send the device refernece , allows an advsery to tamper the device
 	out(~deviceId);
 
 	!(
-		//lock the device before starting the protocol, as unlocking bootloader reqiure rebooting
-		//lock <'device', ~deviceId>;
-
 		//recieve nonce from the App
 		[AndroidIntentTOSW(asid,nonce,packagename,appSignature)]--[]-> [];
 
-		//create attestation report
-		lookup <'device', ~deviceId> as measurement in
-		let softwareMeasurement = fst(measurement) in
-		let hardwareMeasurement = snd(measurement) in
-		let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
-	
-		//send attestation report to the app
-		[]--[]-> [AndroidIntentFRSW(asid,~deviceId,blob)];
-		event S_finish()
+		if(status = 'tamper') then
+			let hardwareMeasurement = 'invalid' in
+			let softwareMeasurement = 'valid' in
+			let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			//send attestation report to the app
+			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
+			event S_finish();
+			0
+		else
+			let hardwareMeasurement = 'valid' in
+			let softwareMeasurement = 'valid' in
+			let blob = rep(<softwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			//send attestation report to the app
+			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
+			event S_finish()
 		
 	)
 
@@ -100,7 +97,7 @@ let App =
 		[]--[]-> [AndroidIntentTOSW(~asid,nonce,packagename,sign(key,<packagename,content>))];
 
 		//retrive a blob represent the device measurment
-		[AndroidIntentFRSW(~asid,deviceId,blob)]--[]-> [];
+		[AndroidIntentFRSW(~asid,hardwareMeasurement,blob)]--[]-> [];
 
 		//send the blob to the developer server 
 		out(aenc(dvpk,<'blob_request',~ask,blob>));
@@ -111,16 +108,19 @@ let App =
 		event SecretReceived(secret);
 
 		event A_finish();
-
-		//leak secret if app repacked or device tampered
-		if (appSignature = sign(key,<packagename,content>)) 	then
-			event AA_finish();
-			0
-		else
-			event XA_finish();
-			out(secret);
-			0
 		
+		//leak secret if app repacked
+		if not(appSignature = sign(key,<packagename,content>)) then
+			out(secret);
+			event XA_finish()
+		else
+			//leak if device tampered 
+			if(hardwareMeasurement = 'invalid') then
+				out(secret);
+				event XR_finish()
+			else
+				event AA_finish()
+	
 	)
 
 //todo : check if blob leaked, what goes wrong
@@ -196,7 +196,7 @@ new ~skAT;
 let pkAT = pk(~skAT) in
 
 
-(!SecureWorld ||!App || !DevServer || AtServer || DeviceTamper)
+(!SecureWorld ||!App || !DevServer || AtServer)
 
 lemma types [sources]:
 	"(All secret #i. SecretReceived(secret) @ i ==> 
@@ -220,6 +220,10 @@ exists-trace
 lemma Correctness_XA:
 exists-trace
 	"Ex #i. XA_finish()@i"
+
+lemma Correctness_XR:
+exists-trace
+	"Ex #i. XR_finish()@i"
 
 lemma Correctness_AA:
 exists-trace
