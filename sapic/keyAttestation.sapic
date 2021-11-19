@@ -23,57 +23,63 @@
 	
 *******************************************************************************/
 
-theory KnoxV3
+theory KeyAttestation
 begin
 
 builtins: signing, asymmetric-encryption
 
-functions: check_rep/2,  get_rep/1, rep/2 [private]
+functions: create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
 
 equations:
-    check_rep(rep(x.1, x.2), x.2) = true,
-    get_rep(rep(x.1, x.2)) = x.1
+    create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
+      = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
 
+    verify_certificate( 
+    < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+     , < IssuerTBSCertificateInfo, pk(IssuerSk), sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>,IssuerRootSk) >
+          ) = true,
 
+    get_tbsInfo_certificate( 
+        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+          ) = SubjectTBSCertificateInfo
       
 
 let SecureWorld =
 
-	//Create device reference
-	new ~deviceId;
-
 	//receive an adversary's attempt to compomised the device
 	in(status);
 
-	//send the device refernece , allows an advsery to tamper the device
-	out(~deviceId);
+	//Request attestation server
+	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
+	
+	//Create keymaster certficate
+	new ~keymasterSk;
+	let  intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keymasterSk),rootSk) in
 
 	!(
 		//recieve nonce from the App
-		[AndroidIntentTOSW(asid,nonce,packagename,appSignature)]--[]-> [];
-
-		new ~tsid;
+		[AndroidIntentTOSW(asid,nonce,packagename,appSignature)]--[]->[];
+		
+		new ~key;
+		let subjectCertificate = create_certificate(<hardwareMeasurement,nonce,packagename,appSignature>,pk(~key),~keymasterSk) in
+		let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
-			[]--[]-> [HttpsToAt(~tsid,blob)];
-			[HttpsFromAT(~tsid,hid)]--[]-> [];
-			//send hid to the app
-			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,hid)];
+			let subjectCertificate = create_certificate(<hardwareMeasurement,nonce,packagename,appSignature>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
+			[]--[]->[AndroidIntentFRSW(asid,hardwareMeasurement,certificateChain)];
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
-			//send attestation report to the attestation server
-			[]--[]-> [HttpsToAt(~tsid,blob)];
-			[HttpsFromAT(~tsid,hid)]--[]-> [];
-			//send hid to the app
-			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,hid)];
+			let subjectCertificate = create_certificate(<hardwareMeasurement,nonce,packagename,appSignature>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
+			[]--[]->[AndroidIntentFRSW(asid,hardwareMeasurement,certificateChain)];
 			event S_finish()
 		
 	)
@@ -84,8 +90,7 @@ let App =
 	in(<packagename,content,sign(key,<packagename,content>)>);
 
 	//retrive the developer channel public key for secure coumincation
-	[GetDeveloperkey(dvpk,appSignature)]--[]-> [];
-	
+	[GetDeveloperkey(dvpk,appSignature)]--[]->[];
 	
 	!(
         
@@ -102,16 +107,16 @@ let App =
 		new ~asid;
 
 		//Send nonce to attestation agent and request measuring the device status 
-		[]--[]-> [AndroidIntentTOSW(~asid,nonce,packagename,sign(key,<packagename,content>))];
+		[]--[]->[AndroidIntentTOSW(~asid,nonce,packagename,sign(key,<packagename,content>))];
 
-		//retrive a hid represent the device measurment
-		[AndroidIntentFRSW(~asid,hardwareMeasurement,hid)]--[]-> [];
+		//retrive a certificateChain represent the device measurment
+		[AndroidIntentFRSW(~asid,hardwareMeasurement,certificateChain)]--[]->[];
 
-		//send the hid to the developer server 
-		out(aenc(dvpk,<'hid_request',~ask,hid>));
+		//send the certificateChain to the developer server 
+		out(aenc(dvpk,<'certificateChain_request',~ask,certificateChain>));
 
-		//retrive the secret from the developer server as a response from sending hid
-		in(aenc(~ask,<'hid_response',secret>));
+		//retrive the secret from the developer server as a response from sending certificateChain
+		in(aenc(~ask,<'certificateChain_response',secret>));
 
 		event SecretReceived(secret);
 
@@ -132,6 +137,7 @@ let App =
 	)
 
 
+//todo : check if blob leaked, what goes wrong
 
 let DevServer =
 
@@ -151,7 +157,7 @@ let DevServer =
 	out(dbpk);
 
 	//send the publick key privatley for  client who request it by URL (authetnication)
-	[]--[]-> [GetDeveloperkey(pk(~dvk),appSignature)];
+	[]--[]->[GetDeveloperkey(pk(~dvk),appSignature)];
 	
 	//create a secret to be sent inexchange for a valid report
 	new ~secret;
@@ -167,40 +173,36 @@ let DevServer =
 		out(aenc(ask,<'nonce_response',~nonce>));
 
 
-		//retrive hid from clients
-		in(aenc(dbpk,<'hid_request',ask,hid>));
+		//retrive blob from clients
+		in(aenc(dbpk,<'certificateChain_request',ask,<subjectCertificate, intermediateCertificate, rootCertificate>>));
 
-
-		//create developer-attesation server session id, to keep track or pair of request-response message  
-		new ~sid;
-		//send hid to the attestation server
-		[]--[]-> [TOAT(~sid,hid)];
-		//retreive the verfied report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<'valid',~nonce,~packagename,appSignature, deviceId>)]--[]-> [];
-
+		[!GetRootCertificate(rootCertificate)]--[]->[];
 		
-		out(aenc(ask,<'hid_response',~secret>));
+		let verification1 = verify_certificate(subjectCertificate, intermediateCertificate) in
+      	let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
+      	let verification3 = verify_certificate(rootCertificate, rootCertificate) in
+		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
+		
+		new ~vsid;
+		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
+		[VerficationCertificatehain('verification',<~vsid,true,true,true,<'valid',~nonce,~packagename,appSignature>>)]--[]->[];
+		out(aenc(ask,<'certificateChain_response',~secret>));
 
 		event D_finish() 
 	)
 	
 let AtServer =
+	new ~rootSk;
+	let rootCertificate = create_certificate('TbsInfo',pk(~rootSk),~rootSk) in
+
+	//share root certficate	
+	[]--[]->
+	[
+		!RequestCreatingIntermediateCertificate(~rootSk,rootCertificate),
+		!GetRootCertificate(rootCertificate)
+	];
+
 	!(
-		//Retrive blob
-		[HttpsToAt(tsid,rep(<hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
-
-		//refernce blob to an hid
-		new ~hid;
-		//Send hid for the TZ
-		[]--[]-> [HttpsFromAT(tsid,~hid)];
-		
-		//Retrive hid from the developer server and verfiy it
-        [TOAT(sid,~hid)]--[]-> [];
-
-		//create a verdict  and send it to the developer server
-		let verdict = <hardwareMeasurement,nonce,packagename,appSignature, deviceId> in
-        []--[]-> [FRAT(sid,verdict)];
-
 		event T_finish() 
 	)
 
