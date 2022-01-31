@@ -205,35 +205,50 @@ lemma types [sources]:
 	| (Ex #j. SecretGenerated( secret ) @ j)
 	))"
 
-lemma Correctness_D:
-exists-trace
-	"Ex #i. D_finish()@i"
-
-lemma Correctness_S:
-exists-trace
-	"Ex #i. S_finish()@i"
-
-lemma Correctness_A:
-exists-trace
-	"Ex #i. A_finish()@i"
-
-lemma Correctness_XA:
-exists-trace
-	"Ex #i. XA_finish()@i"
-
-lemma Correctness_XR:
-exists-trace
-	"Ex #i. XR_finish()@i"
-
-lemma Correctness_AA:
-exists-trace
-	"Ex #i. AA_finish()@i"
-
-lemma Correctness_T:
-exists-trace
-	"Ex #i. T_finish()@i"
 
 lemma SecretSecrecy: 
         "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
+
+lemma ApplicationTampered:
+exists-trace
+	"Ex #i. XA_finish()@i"
+
+lemma DeviceTampered:
+exists-trace
+	"Ex #i. XR_finish()@i"
+
+
+//Sanity check: Application Finshed without Rooting Nor Repacking:
+lemma Correctness_AA:
+exists-trace
+	"Ex #i. AA_finish()@i"
+	
+//Sanity check: Developer server finsihed
+lemma Correctness_D:
+exists-trace
+	"Ex #i. D_finish()@i"
+
+//Sanity check: Secure world/device Finished
+lemma Correctness_S:
+exists-trace
+	"Ex #i. S_finish()@i"
+
+//Sanity check: Application finished
+lemma Correctness_A:
+exists-trace
+	"Ex #i. A_finish()@i"
+
+//Sanity check: Attesation server finished
+lemma Correctness_T:
+exists-trace
+	"Ex #i. T_finish()@i"
+
 end
+
+
+
+
+
+
+

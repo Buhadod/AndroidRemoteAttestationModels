@@ -23,12 +23,12 @@
 	
 *******************************************************************************/
 
-theory KeyAttestation
+theory CodeProtection2
 begin
 
 builtins: signing, asymmetric-encryption
 
-functions: create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+functions: create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1, get_subject_pk/1
 
 equations:
     create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
@@ -41,7 +41,11 @@ equations:
 
     get_tbsInfo_certificate( 
         < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-          ) = SubjectTBSCertificateInfo
+          ) = SubjectTBSCertificateInfo,
+
+	get_subject_pk( 
+        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+          ) = pk(SubjectSk)
       
 
 let SecureWorld =
@@ -98,10 +102,10 @@ let App =
 		new ~ask;
 
 		//request a nonce from the developer server
-		out(aenc(dvpk,<'nonce_request',~ask>));
+		//out(aenc(dvpk,<'nonce_request',~ask>));
 
 		//retreive a nonoce from the developer server
-		in(aenc(~ask,<'nonce_response',nonce>));
+		in(<'nonce_response',nonce>);
 
 		//create a android intent session id, to keep track of the intent session during cominication with attestation agent in the TEE 
 		new ~asid;
@@ -113,10 +117,10 @@ let App =
 		[AndroidIntentFRSW(~asid,hardwareMeasurement,certificateChain)]--[]->[];
 
 		//send the certificateChain to the developer server 
-		out(aenc(dvpk,<'certificateChain_request',~ask,certificateChain>));
+		out(<'certificateChain_request',certificateChain>);
 
 		//retrive the secret from the developer server as a response from sending certificateChain
-		in(aenc(~ask,<'certificateChain_response',secret>));
+		in(<'certificateChain_response',secret>);
 
 		event SecretReceived(secret);
 
@@ -168,13 +172,13 @@ let DevServer =
 		// create a nonce
 		new ~nonce;
 		// retrive clients' session key
-		in(aenc(dbpk,<'nonce_request',ask>));
+		//in(aenc(dbpk,<'nonce_request',ask>));
 		//send nonce to to clients encrypted with their session key
-		out(aenc(ask,<'nonce_response',~nonce>));
+		out(<'nonce_response',~nonce>);
 
 
 		//retrive blob from clients
-		in(aenc(dbpk,<'certificateChain_request',ask,<subjectCertificate, intermediateCertificate, rootCertificate>>));
+		in(<'certificateChain_request',<subjectCertificate, intermediateCertificate, rootCertificate>>);
 
 		[!GetRootCertificate(rootCertificate)]--[]->[];
 		
@@ -182,13 +186,16 @@ let DevServer =
       	let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
       	let verification3 = verify_certificate(rootCertificate, rootCertificate) in
 		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
+		let subjectPk = get_subject_pk(subjectCertificate) in
 		
 		new ~vsid;
 		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
 		[VerficationCertificatehain('verification',<~vsid,true,true,true,<'valid',~nonce,~packagename,appSignature>>)]--[]->[];
-		out(aenc(ask,<'certificateChain_response',~secret>));
+		event D_finish();
+		event V_finish(verification1,verification2,verification3);
+		out(<'certificateChain_response',~secret>)
 
-		event D_finish() 
+		 
 	)
 	
 let AtServer =
@@ -222,41 +229,40 @@ lemma types [sources]:
 	| (Ex #j. SecretGenerated( secret ) @ j)
 	))"
 
-lemma SecretSecrecy: 
-        "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
-end
 
-lemma ApplicationTampered:
-exists-trace
-	"Ex #i. XA_finish()@i"
-
-lemma DeviceTampered:
-exists-trace
-	"Ex #i. XR_finish()@i"
-
-
-//Sanity check: Application Finshed without Rooting Nor Repacking:
-lemma Correctness_AA:
-exists-trace
-	"Ex #i. AA_finish()@i"
-	
-//Sanity check: Developer server finsihed
 lemma Correctness_D:
 exists-trace
 	"Ex #i. D_finish()@i"
 
-//Sanity check: Secure world/device Finished
 lemma Correctness_S:
 exists-trace
 	"Ex #i. S_finish()@i"
 
-//Sanity check: Application finished
+lemma Correctness_V:
+exists-trace
+	"Ex #i. V_finish(true,true,true)@i"
+
 lemma Correctness_A:
 exists-trace
 	"Ex #i. A_finish()@i"
 
-//Sanity check: Attesation server finished
+lemma Correctness_XA:
+exists-trace
+	"Ex #i. XA_finish()@i"
+
+lemma Correctness_XR:
+exists-trace
+	"Ex #i. XR_finish()@i"
+
+lemma Correctness_AA:
+exists-trace
+	"Ex #i. AA_finish()@i"
+
 lemma Correctness_T:
 exists-trace
 	"Ex #i. T_finish()@i"
+
+lemma SecretSecrecy: 
+        "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
+
 end
