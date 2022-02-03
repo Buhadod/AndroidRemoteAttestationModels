@@ -23,7 +23,7 @@
 	
 *******************************************************************************/
 
-theory SafetyNet_H
+theory SafetyNet_Hardware
 begin
 
 builtins: signing, asymmetric-encryption
@@ -57,7 +57,7 @@ let SecureWorld =
 			let softwareMeasurement = 'valid' in
 			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
-			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
+			[]--[]-> [AndroidIntentFRSW(asid,~deviceId,hardwareMeasurement,blob)];
 			event S_finish();
 			0
 		else
@@ -65,13 +65,14 @@ let SecureWorld =
 			let softwareMeasurement = 'valid' in
 			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
-			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
+			[]--[]-> [AndroidIntentFRSW(asid,~deviceId,hardwareMeasurement,blob)];
 			event S_finish()
 		
 	)
 
 let App =
 
+	new ~appId;
 	//install an application
 	in(<packagename,content,sign(key,<packagename,content>)>);
 
@@ -97,7 +98,7 @@ let App =
 		[]--[]-> [AndroidIntentTOSW(~asid,nonce,packagename,sign(key,<packagename,content>))];
 
 		//retrive a blob represent the device measurment
-		[AndroidIntentFRSW(~asid,hardwareMeasurement,blob)]--[]-> [];
+		[AndroidIntentFRSW(~asid,deviceId,hardwareMeasurement,blob)]--[]-> [];
 
 		//send the blob to the developer server 
 		out(aenc(dvpk,<'blob_request',~ask,blob>));
@@ -106,18 +107,23 @@ let App =
 		in(aenc(~ask,<'blob_response',secret>));
 
 		event SecretReceived(secret);
+		event SecretReceivedToApp(secret,~appId);
+		event SecretReceivedToDevice(secret,deviceId);
 
 		event A_finish();
 		
 		//leak secret if app repacked
 		if not(appSignature = sign(key,<packagename,content>)) then
-			out(secret);
-			event XA_finish()
+			event ApplicationTampered(~appId);
+			event DeviceTampered(deviceId);
+			event AXA_finish();			
+			out(secret)
 		else
 			//leak if device tampered 
 			if(hardwareMeasurement = 'invalid') then
-				out(secret);
-				event XR_finish()
+				event DeviceTampered(deviceId);
+				event AXR_finish();
+				out(secret)
 			else
 				event AA_finish()
 	
@@ -153,6 +159,7 @@ let DevServer =
 	!(
 		// create a nonce
 		new ~nonce;
+		event NonnceGenerated(~nonce);
 		// retrive clients' session key
 		in(aenc(dbpk,<'nonce_request',ask>));
 		//send nonce to to clients encrypted with their session key
@@ -208,20 +215,17 @@ lemma types [sources]:
 lemma SecretSecrecy: 
         "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
-lemma ApplicationTampered:
-exists-trace
-	"Ex #i. XA_finish()@i"
+lemma ApplicationIntegrity:
+	"(not ( Ex secret appId #i #j #k. SecretGenerated(secret) @i & SecretReceivedToApp(secret,appId) @j & ApplicationTampered(appId) @k ))"
 
-lemma DeviceTampered:
-exists-trace
-	"Ex #i. XR_finish()@i"
+lemma DeviceIntegrity:
+	"(not ( Ex secret deviceId #i #j #k. SecretGenerated(secret) @i &  SecretReceivedToDevice(secret,deviceId) @j & DeviceTampered(deviceId) @k ))"
+
+lemma UniqueNonce:
+	"All n #i #j. NonnceGenerated(n) @i & NonnceGenerated(n) @j ==> #i=#j"
 
 
-//Sanity check: Application Finshed without Rooting Nor Repacking:
-lemma Correctness_AA:
-exists-trace
-	"Ex #i. AA_finish()@i"
-	
+
 //Sanity check: Developer server finsihed
 lemma Correctness_D:
 exists-trace
@@ -237,6 +241,21 @@ lemma Correctness_A:
 exists-trace
 	"Ex #i. A_finish()@i"
 
+//Sanity check: Application Finshed with no tampere
+lemma Correctness_AA:
+exists-trace
+	"Ex #i. AA_finish()@i"
+
+//Sanity check: Application Finshed with app tampered 
+lemma Correctness_AXA:
+exists-trace
+	"Ex #i. AXA_finish()@i"
+
+//Sanity check: Application Finshed with device tampered
+lemma Correctness_AXR:
+exists-trace
+	"Ex #i. AXR_finish()@i"
+	
 //Sanity check: Attesation server finished
 lemma Correctness_T:
 exists-trace
