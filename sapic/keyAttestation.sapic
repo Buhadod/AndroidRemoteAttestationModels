@@ -50,7 +50,7 @@ let SecureWorld =
 	new ~deviceId;
 
 	//receive an adversary's attempt to compomised the device
-	in(status);
+	in(<status,customSoftwareMeasurement>);
 
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
@@ -69,7 +69,7 @@ let SecureWorld =
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
+			let softwareMeasurement = customSoftwareMeasurement in
 			let subjectCertificate = create_certificate(<hardwareMeasurement,nonce,packagename,appSignature>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
@@ -130,14 +130,14 @@ let App =
 		
 		//leak secret if app repacked
 		if not(appSignature = sign(key,<packagename,content>)) then
-			event ApplicationTampered(~appId);
-			event DeviceTampered(deviceId);
+			event ApplicationTampered(~appId,secret);
+			event DeviceTampered(deviceId,secret);
 			event AXA_finish();			
 			out(secret)
 		else
 			//leak if device tampered 
 			if(hardwareMeasurement = 'invalid') then
-				event DeviceTampered(deviceId);
+				event DeviceTampered(deviceId,secret);
 				event AXR_finish();
 				out(secret)
 			else
@@ -176,7 +176,7 @@ let DevServer =
 	!(
 		// create a nonce
 		new ~nonce;
-		event NonnceGenerated(~nonce);
+		event NonceGenerated(~nonce);
 
 		// retrive clients' session key
 		in(aenc(dbpk,<'nonce_request',ask>));
@@ -237,13 +237,14 @@ lemma SecretSecrecy:
         "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
 lemma ApplicationIntegrity:
-	"(not ( Ex secret appId #i #j #k. SecretGenerated(secret) @i & SecretReceivedToApp(secret,appId) @j & ApplicationTampered(appId) @k ))"
+	"(not ( Ex secret appId #i #k. SecretGenerated(secret) @i & ApplicationTampered(appId,secret) @k ))"
 
 lemma DeviceIntegrity:
-	"(not ( Ex secret deviceId #i #j #k. SecretGenerated(secret) @i &  SecretReceivedToDevice(secret,deviceId) @j & DeviceTampered(deviceId) @k ))"
+	"(not ( Ex secret deviceId #i #k. SecretGenerated(secret) @i & DeviceTampered(deviceId,secret) @k ))"
 
 lemma UniqueNonce:
-	"All n #i #j. NonnceGenerated(n) @i & NonnceGenerated(n) @j ==> #i=#j"
+	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
+
 
 	
 //Sanity check: Developer server finsihed
