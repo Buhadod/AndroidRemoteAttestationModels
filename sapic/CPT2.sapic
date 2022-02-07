@@ -249,8 +249,6 @@ let pkAT = pk(~skAT) in
 (!SecureWorld ||!App || !DevServer || AtServer || KeyStore)
 
 
-
-
 lemma SecretSecrecy: 
         "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
 
