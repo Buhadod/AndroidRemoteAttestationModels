@@ -1,0 +1,107 @@
+/*******************************************************************************
+	Knox v2
+	AUTHORS
+	
+	Sample message using SAPIC
+	
+
+	Protocol:
+	1. C -> S: aenc(k, pkS)
+	2. C <- S: h(k)
+
+	Notation:
+	
+	pmk = Pairwise Master Key
+	ptk = Pairwise Transient Key, composed of:
+		kck = Key Confirmation Key
+		kek = Key Encryption Key
+		tk = Temporal Key
+	gtk = Group Temporal Key
+	
+	A_  = Events only in authenticator process
+	S_  = Events only in supplicant process
+	
+*******************************************************************************/
+
+theory KnoxV2Alpha
+begin
+
+builtins:
+	multiset,
+	signing,
+	asymmetric-encryption
+
+
+let SecureWorld =
+	new ~deviceId;
+	!(
+		[AndroidIntentTOSW(nonce)]--[]-> [];
+		let blob = aenc(sign (<'NotRooted',nonce, ~deviceId>,~skS), pkT) in 
+	
+		[]--[]-> [AndroidIntentFRSW(blob)];
+		event S_finish()
+	)
+
+let App =
+	new ~appSignature;
+	new ~packageName;
+	!(
+        new ~nonce;
+
+		[]--[]-> [AndroidIntentTOSW(~nonce)];
+
+		[AndroidIntentFRSW(blob)]--[]-> [];
+
+		out(blob);
+
+		event A_finish()
+	)
+
+
+let DevServer =
+	!(
+		
+		in(blob);
+
+		[]--[]-> [TOAT(blob)];
+
+		[FRAT(stmt)]--[]-> [];
+
+		event D_finish() 
+	)
+	
+let AtServer =
+	!(
+
+        [TOAT(aenc(sign (<'NotRooted',~nonce, deviceId>,~skS), pkT))]--[]-> [];
+
+		let stmt = <'NotRooted',~nonce, deviceId> in
+
+        []--[]-> [FRAT(stmt)];
+
+		event T_finish() 
+	)
+
+// Main process starts here
+new ~skT;
+new ~skS;
+let pkT = pk(~skT) in
+(!SecureWorld ||!App || !DevServer || AtServer )
+
+lemma Correctness_D:
+exists-trace
+	"Ex #i. D_finish()@i"
+
+lemma Correctness_S:
+exists-trace
+	"Ex #i. S_finish()@i"
+
+lemma Correctness_A:
+exists-trace
+	"Ex #i. A_finish()@i"
+
+lemma Correctness_T:
+exists-trace
+	"Ex #i. T_finish()@i"
+
+end

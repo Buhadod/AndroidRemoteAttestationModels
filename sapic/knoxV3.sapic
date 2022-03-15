@@ -1,0 +1,279 @@
+/*******************************************************************************
+	Knox v2
+	AUTHORS
+	
+	Sample message using SAPIC
+	
+
+	Protocol:
+	1. C -> S: aenc(k, pkS)
+	2. C <- S: h(k)
+
+	Notation:
+	
+	pmk = Pairwise Master Key
+	ptk = Pairwise Transient Key, composed of:
+		kck = Key Confirmation Key
+		kek = Key Encryption Key
+		tk = Temporal Key
+	gtk = Group Temporal Key
+	
+	A_  = Events only in authenticator process
+	S_  = Events only in supplicant process
+	
+*******************************************************************************/
+
+theory KnoxV3
+begin
+
+builtins: signing, asymmetric-encryption
+
+functions: check_rep/2,  get_rep/1, rep/2 [private]
+
+equations:
+    check_rep(rep(x.1, x.2), x.2) = true,
+    get_rep(rep(x.1, x.2)) = x.1
+
+
+      
+
+let SecureWorld =
+
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
+
+	!(
+		//recieve nonce from the App
+		[AndroidIntentTOSW(asid,nonce,packagename,appSignature)]--[]-> [];
+
+		new ~tsid;
+
+		if(status = 'tamper') then
+			let hardwareMeasurement = 'invalid' in
+			let softwareMeasurement = customSoftwareMeasurement in
+			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			///send attestation report to the attestation server
+			[]--[]-> [HttpsToAt(~tsid,blob)];
+			[HttpsFromAT(~tsid,hid)]--[]-> [];
+			//send hid to the app
+			[]--[]-> [AndroidIntentFRSW(asid,~deviceId,hardwareMeasurement,hid)];
+			event S_finish();
+			0
+		else
+			let hardwareMeasurement = 'valid' in
+			let softwareMeasurement = 'valid' in
+			let blob = rep(<hardwareMeasurement,nonce,packagename,appSignature, ~deviceId>,<~skAT,'Trustzone'>) in 
+			//send attestation report to the attestation server
+			[]--[]-> [HttpsToAt(~tsid,blob)];
+			[HttpsFromAT(~tsid,hid)]--[]-> [];
+			//send hid to the app
+			[]--[]-> [AndroidIntentFRSW(asid,~deviceId,hardwareMeasurement,hid)];
+			event S_finish()
+		
+	)
+
+let App =
+
+	new ~appId;
+	//install an application
+	in(<packagename,content,sign(key,<packagename,content>)>);
+
+	//retrive the developer channel public key for secure coumincation
+	[GetDeveloperkey(dvpk,appSignature)]--[]-> [];
+	
+	
+	!(
+        
+		//Create a session key to cominictae with the developer securely
+		new ~ask;
+
+		//request a nonce from the developer server
+		out(aenc(dvpk,<'nonce_request',~ask>));
+
+		//retreive a nonoce from the developer server
+		in(aenc(~ask,<'nonce_response',nonce>));
+
+		//create a android intent session id, to keep track of the intent session during cominication with attestation agent in the TEE 
+		new ~asid;
+
+		//Send nonce to attestation agent and request measuring the device status 
+		[]--[]-> [AndroidIntentTOSW(~asid,nonce,packagename,sign(key,<packagename,content>))];
+
+		//retrive a hid represent the device measurment
+		[AndroidIntentFRSW(~asid,deviceId,hardwareMeasurement,hid)]--[]-> [];
+
+		//send the hid to the developer server 
+		out(aenc(dvpk,<'hid_request',~ask,hid>));
+
+		//retrive the secret from the developer server as a response from sending hid
+		in(aenc(~ask,<'hid_response',secret>));
+
+		event SecretReceived(secret);
+		event SecretReceivedToApp(secret,~appId);
+		event SecretReceivedToDevice(secret,deviceId);
+
+		event A_finish();
+		
+		//leak secret if app repacked
+		if not(appSignature = sign(key,<packagename,content>)) then
+			event ApplicationTampered(~appId,secret);
+			event DeviceTampered(deviceId,secret);
+			event AXA_finish();
+			out(secret)
+			
+		else
+			//leak if device tampered 
+			if(hardwareMeasurement = 'invalid') then
+				event DeviceTampered(deviceId,secret);
+				event AXR_finish();
+				out(secret)
+			else
+				event AA_finish()
+	
+	)
+
+
+
+let DevServer =
+
+	//creating and publising the application
+	new ~advk;
+	new ~content;
+	new ~packagename;
+	let appSignature = sign(~advk, <~packagename,~content>) in
+	let app = <~packagename,~content,appSignature> in
+	out(app);
+
+	//create a developer's pair key for secure cominucaion with clients
+	new ~dvk;
+	let dbpk = pk(~dvk) in
+
+	//send it public key publically, allows advsery to cominuncate with the developer server
+	out(dbpk);
+
+	//send the publick key privatley for  client who request it by URL (authetnication)
+	[]--[]-> [GetDeveloperkey(pk(~dvk),appSignature)];
+	
+	//create a secret to be sent inexchange for a valid report
+	new ~secret;
+	event SecretGenerated(~secret);
+
+
+	!(
+		// create a nonce
+		new ~nonce;
+		event NonceGenerated(~nonce);
+
+		// retrive clients' session key
+		in(aenc(dbpk,<'nonce_request',ask>));
+		//send nonce to to clients encrypted with their session key
+		out(aenc(ask,<'nonce_response',~nonce>));
+
+
+		//retrive hid from clients
+		in(aenc(dbpk,<'hid_request',ask,hid>));
+
+
+		//create developer-attesation server session id, to keep track or pair of request-response message  
+		new ~sid;
+		//send hid to the attestation server
+		[]--[]-> [TOAT(~sid,hid)];
+		//retreive the verfied report the attestation server, pattern matching is used for checking the status
+		[FRAT(~sid,<'valid',~nonce,~packagename,appSignature, deviceId>)]--[]-> [];
+
+		
+		out(aenc(ask,<'hid_response',~secret>));
+
+		event D_finish() 
+	)
+	
+let AtServer =
+	!(
+		//Retrive blob
+		[HttpsToAt(tsid,rep(<hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+
+		//refernce blob to an hid
+		new ~hid;
+		//Send hid for the TZ
+		[]--[]-> [HttpsFromAT(tsid,~hid)];
+		
+		//Retrive hid from the developer server and verfiy it
+        [TOAT(sid,~hid)]--[]-> [];
+
+		//create a verdict  and send it to the developer server
+		let verdict = <hardwareMeasurement,nonce,packagename,appSignature, deviceId> in
+        []--[]-> [FRAT(sid,verdict)];
+
+		event T_finish() 
+	)
+
+// Main process starts here
+
+//create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
+new ~skAT;
+let pkAT = pk(~skAT) in
+
+
+(!SecureWorld ||!App || !DevServer || AtServer)
+
+lemma types [sources]:
+	"(All secret #i. SecretReceived(secret) @ i ==> 
+	( 
+	(Ex #j. KU(secret) @ j & j < i) 
+	| (Ex #j. SecretGenerated( secret ) @ j)
+	))"
+
+lemma SecretSecrecy: 
+    "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
+
+lemma ApplicationIntegrity:
+	"(not ( Ex secret appId #i #k. SecretGenerated(secret) @i & ApplicationTampered(appId,secret) @k ))"
+
+lemma DeviceIntegrity:
+	"(not ( Ex secret deviceId #i #k. SecretGenerated(secret) @i & DeviceTampered(deviceId,secret) @k ))"
+
+lemma UniqueNonce:
+	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
+
+	
+//Sanity check: Developer server finsihed
+lemma Correctness_D:
+exists-trace
+	"Ex #i. D_finish()@i"
+
+//Sanity check: Secure world/device Finished
+lemma Correctness_S:
+exists-trace
+	"Ex #i. S_finish()@i"
+
+//Sanity check: Application finished
+lemma Correctness_A:
+exists-trace
+	"Ex #i. A_finish()@i"
+
+//Sanity check: Application Finshed without Rooting Nor Repacking:
+lemma Correctness_AA:
+exists-trace
+	"Ex #i. AA_finish()@i"
+
+//Sanity check: Application Finshed with app tampered 
+lemma Correctness_AXA:
+exists-trace
+	"Ex #i. AXA_finish()@i"
+
+//Sanity check: Application Finshed with device tampered
+lemma Correctness_AXR:
+exists-trace
+	"Ex #i. AXR_finish()@i"
+	
+//Sanity check: Attesation server finished
+lemma Correctness_T:
+exists-trace
+	"Ex #i. T_finish()@i"
+end
