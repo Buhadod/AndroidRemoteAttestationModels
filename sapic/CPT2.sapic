@@ -23,7 +23,7 @@
 	
 *******************************************************************************/
 
-theory CPT
+theory CPT2
 begin
 
 builtins: signing, asymmetric-encryption
@@ -141,14 +141,14 @@ let App =
 		[]--[]->[AndroidIntentTOKS(~asid,cipher)];
 
 		//receive secret from keystore
-		[AndroidIntentFRKS(~asid,secret)]--[]->[];
+		[AndroidIntentFRKS(~asid,<secret,sign(dbpk,signature)>)]--[]->[];
 
 		event CipherReceived(cipher);
 		event SecretReceived(secret);
 		event SecretReceivedToApp(secret,~appId);
 		event SecretReceivedToDevice(secret,deviceId);
 
-		event A_finish();
+		event A_finish(true);
 		
 		//leak secret if app repacked
 		if not(appSignature = sign(key,<packagename,content>)) then
@@ -188,7 +188,7 @@ let DevServer =
 	out(dbpk);
 
 	//send the publick key privatley for  client who request it by URL (authetnication)
-	[]--[]->[GetDeveloperkey(pk(~dvk),appSignature)];
+	[]--[]->[GetDeveloperkey(~dvk,appSignature)];
 	
 	//create a secret to be sent inexchange for a valid report
 	new ~secret;
@@ -218,7 +218,7 @@ let DevServer =
 		new ~vsid;
 		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
 		[VerficationCertificatehain('verification',<~vsid,true,true,true,<'valid',~nonce,~packagename,appSignature>>)]--[]->[];
-		out(<'certificateChain_response',aenc(ppk,~secret)>);
+		out(<'certificateChain_response',aenc(ppk,<~secret,sign(~dvk,~secret)>)>);
 
 		event CipherGenerated(aenc(ppk,~secret));
 		event D_finish() 
@@ -276,7 +276,7 @@ exists-trace
 //Sanity check: Application finished
 lemma Correctness_A:
 exists-trace
-	"Ex #i. A_finish()@i"
+	"Ex #i. A_finish(true)@i"
 
 //Sanity check: Application Finshed with no tampere
 lemma Correctness_AA:
