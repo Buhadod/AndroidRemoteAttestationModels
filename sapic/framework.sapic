@@ -430,8 +430,8 @@ let DevServerKA =
 		[!GetRootCertificate(rootCertificate)]--[]->[];
 		
 		let verification1 = verify_certificate(subjectCertificate, intermediateCertificate) in
-      	let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
-      	let verification3 = verify_certificate(rootCertificate, rootCertificate) in
+		let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
+		let verification3 = verify_certificate(rootCertificate, rootCertificate) in
 		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
 		
 		new ~vsid;
@@ -512,13 +512,13 @@ let AppCode =
 	
 // Main process starts here
 
-/***************************************** choose a platofrm ******************************************
-* platform				| 		SafetyNet		   |	KnoxV2 		|    KnoxV3		| Key Attestation
-* -----------------------------------------------------------------------------------------------------
-* AttestationAgent   	: GooglePlay | SafetyNetTA | KnoxV2TA 	 	| KnoxV3TA 		| KeyMasterTA
-* AtServer 				: 		AtServerSN 		   | AtServerKV2  	| AtServerKV3 	| AtServerKA
-* DevServer 			: 	    DevServerSN 	   | DevServerKV2 	| DevServerKV3  | DevServerKA
-******************************************************************************************************/
+/***************************************** choose a platofrm ***************************************************
+* platform				|		SafetyNet			|		KnoxV2		|	KnoxV3			|	Key Attestation
+* --------------------------------------------------------------------------------------------------------------
+* AttestationAgent		: GooglePlay | SafetyNetTA	|	KnoxV2TA		|	KnoxV3TA		|	KeyMasterTA
+* AtServer				:		AtServerSN			|	AtServerKV2		|	AtServerKV3		|	AtServerKA
+* DevServer				:		DevServerSN			|	DevServerKV2	|	DevServerKV3	|	DevServerKA
+***************************************************************************************************************/
 
 
 let AttestationAgent =
