@@ -98,7 +98,19 @@ let DevServerSN =
 
 /***************************************** SafetyNet SW *****************************************/
 
-let GooglePlay =
+let DeviceSNSW =
+
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//request install app in device
+	[]--[]-> [!GetDeviceId(~deviceId)];
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
 
 	!(
 		//recieve nonce from the App
@@ -119,13 +131,24 @@ let GooglePlay =
 			//send attestation report to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
 			event S_finish()
-	)
 		
-	
+	)
 
 /***************************************** SafetyNet HW *****************************************/
 
-let SafetyNetTA =
+let DeviceSNHW =
+
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//request install app in device
+	[]--[]-> [!GetDeviceId(~deviceId)];
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
 
 	!(
 		//recieve nonce from the App
@@ -146,7 +169,9 @@ let SafetyNetTA =
 			//send attestation report to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
 			event S_finish()
+		
 	)
+
 
 /***************************************** Knox V2 *****************************************/
 
@@ -163,7 +188,19 @@ let AtServerKV2 =
 		event T_finish() 
 	)
 
-let KnoxV2TA =
+let DeviceKV2 =
+
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//request install app in device
+	[]--[]-> [!GetDeviceId(~deviceId)];
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
 
 	!(
 		//recieve nonce from the App
@@ -184,8 +221,8 @@ let KnoxV2TA =
 			//send attestation report to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,blob)];
 			event S_finish()
+		
 	)
-	
 
 let DevServerKV2 =
 
@@ -242,8 +279,20 @@ let DevServerKV2 =
 
 /***************************************** Knox V3 *************************************************/
 
-let KnoxV3TA =
-	
+let DeviceKV3 =
+
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//request install app in device
+	[]--[]-> [!GetDeviceId(~deviceId)];
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
+
 	!(
 		//recieve nonce from the App
 		[AndroidIntentTOSW(asid,~deviceId,nonce,packagename,appSignature)]--[]-> [];
@@ -271,8 +320,8 @@ let KnoxV3TA =
 			//send hid to the app
 			[]--[]-> [AndroidIntentFRSW(asid,hardwareMeasurement,hid)];
 			event S_finish()
+		
 	)
-	
 
 let AtServerKV3 = 
 	!(
@@ -349,8 +398,16 @@ let DevServerKV3 =
 
 /***************************************** Key Attestation *****************************************/
 
+let DeviceKA =
 
-let KeyMasterTA =
+	//Create device reference
+	new ~deviceId;
+
+	//receive an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
+	//request install app in device
+	[]--[]-> [!GetDeviceId(~deviceId)];
 
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
@@ -384,9 +441,8 @@ let KeyMasterTA =
 			//send attestation report to the app
 			[]--[]->[AndroidIntentFRSW(asid,hardwareMeasurement,certificateChain)];
 			event S_finish()
-	)
 		
-	
+	)
 
 let DevServerKA =
 
@@ -458,11 +514,7 @@ let AtServerKA =
 		event T_finish() 
 	)
 
-
-
-
-/*************************************** Generic code *************************************************/
-
+/***************************************************************************************************/
 
 let AppCode =
 		//Create a session key to cominictae with the developer securely
@@ -509,44 +561,6 @@ let AppCode =
 				out(secret)
 			else
 				event AA_finish()
-	
-// Main process starts here
-
-/***************************************** choose a platofrm ******************************************
-* platform				| 		SafetyNet		   |	KnoxV2 		|    KnoxV3		| Key Attestation
-* -----------------------------------------------------------------------------------------------------
-* AttestationAgent   	: GooglePlay | SafetyNetTA | KnoxV2TA 	 	| KnoxV3TA 		| KeyMasterTA
-* AtServer 				: 		AtServerSN 		   | AtServerKV2  	| AtServerKV3 	| AtServerKA
-* DevServer 			: 	    DevServerSN 	   | DevServerKV2 	| DevServerKV3  | DevServerKA
-******************************************************************************************************/
-
-
-let AttestationAgent =
-	KnoxV3TA
-
-let AtServer = 
-	AtServerKV3
-
-let DevServer = 
-	DevServerKV3
-
-
-let Device =
-
-	//Create device reference
-	new ~deviceId;
-
-	//receive an adversary's attempt to compomised the device
-	in(<status,customSoftwareMeasurement>);
-
-	//request install app in device
-	[]--[]-> [!GetDeviceId(~deviceId)];
-
-	//send the device refernece , allows an advsery to tamper the device
-	out(~deviceId);
-
-	AttestationAgent
-
 
 let App =
 
@@ -561,6 +575,29 @@ let App =
 	[GetDeveloperkey(dvpk,appSignature)]--[]-> [];
 	
 	!AppCode
+
+
+
+	
+// Main process starts here
+
+/***************************************** choose a platofrm ***************************************
+* platform	| 		SafetyNet		  |	  KnoxV2 	 |    KnoxV3	| Key Attestation
+*-----------------------------------------------------------------------------------------
+* Device   	: DeviceSNSW | DeviceSNHW | DeviceKV2 	 | DeviceKV3 	| DeviceKA
+* AtServer 	: 		AtServerSN 		  | AtServerKV2  | AtServerKV3 	| AtServerKA
+* DevServer : 	    DevServerSN 	  | DevServerKV2 | DevServerKV3 | DevServerKA
+****************************************************************************************************/
+
+let Device = 
+	DeviceKA
+
+let AtServer = 
+	AtServerKA
+
+let DevServer = 
+	DevServerKA
+
 
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
