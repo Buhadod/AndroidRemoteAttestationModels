@@ -47,7 +47,7 @@ let AtServerKV2 =
 let KnoxV2TA =
 
 	!(
-		//receve an application + nonce
+		//retrieve an application + nonce
 		in(<nonce,packagename,content,sign(key,<packagename,content>)>);
 		
 		new ~atId;
@@ -93,7 +93,7 @@ let DevServerKV2 =
 		event NonceGenerated(~nonce);
 		out(~nonce);
 		
-		//retrive blob from clients
+		//retrieve blob from clients
 		in(blob);
 		
 		//create developer-attesation server session id, to keep track or pair of request-response message  
@@ -146,7 +146,7 @@ let Device =
 	//Create device reference
 	new ~deviceId;
 
-	//receive an adversary's attempt to compomised the device
+	//retrieve an adversary's attempt to compomised the device
 	in(<status,customSoftwareMeasurement>);
 
 	//send the device refernece , allows an advsery to tamper the device
