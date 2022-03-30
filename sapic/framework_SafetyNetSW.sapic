@@ -47,7 +47,7 @@ let AtServerSN =
 let GooglePlay =
 
 	!(
-		//receve an application information + nonce
+		//retrieve an application information + nonce
 		in(<nonce,packagename,content,sign(key,<packagename,content>)>);
 		
 		new ~atId;
@@ -101,7 +101,7 @@ let DevServerSN =
 		//send blob to the attestation server
 		[]--[]-> [TOAT(~sid,blob)];
 		
-		//retreive the verfied report the attestation server, pattern matching is used for checking the status
+		//retrieve the verfied report the attestation server, pattern matching is used for checking the status
 		[FRAT(~sid,<atId,measurement,fpackagename,fappSignature,~nonce, deviceId>)]--[]-> [];
 		
 		//attestation finished		
@@ -146,7 +146,7 @@ let Device =
 	//Create device reference
 	new ~deviceId;
 
-	//receive an adversary's attempt to compomised the device
+	//retrieve an adversary's attempt to compomised the device
 	in(<status,customSoftwareMeasurement>);
 
 	//send the device refernece , allows an advsery to tamper the device
