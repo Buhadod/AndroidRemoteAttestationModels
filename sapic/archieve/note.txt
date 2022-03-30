@@ -1,5 +1,8 @@
+framework lemmas 
 It is not possibile to have 
 	a succesfucul verdict and the app compimsed or device tampered.
 
 for any app that have a valid attestation =>
 	created by developer and not device tampered.
+
+We can check for integrity only and app integirty only.

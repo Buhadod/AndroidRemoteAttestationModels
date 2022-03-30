@@ -29,24 +29,22 @@ equations:
           ) = SubjectTBSCertificateInfo
       
 
-/***************************************** Knox V2 *****************************************/
+/***************************************** SafetyNet HW *****************************************/
 
-let AtServerKV2 =
+let AtServerSN =
 	!(
 
 		//retrive the blob from the developer server and verfiy it
         [TOAT(sid,rep(<atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in
-		event Ats_at(atId,hardwareMeasurement, nonce);
-		
+		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in		
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
 	)
 
-let KnoxV2TA =
+let SafetyNetTA =
 
 	!(
 		//receve an application + nonce
@@ -77,8 +75,7 @@ let KnoxV2TA =
 	)
 	
 
-let DevServerKV2 =
-
+let DevServerSN =
 
 	//creating and publising the application
 	new ~advk;
@@ -107,13 +104,7 @@ let DevServerKV2 =
 		//retreive the verfied report the attestation server, pattern matching is used for checking the status
 		[FRAT(~sid,<atId,hardwareMeasurement,fpackagename,fappSignature,~nonce, deviceId>)]--[]-> [];
 		
-		//attestation finished
-		//in knoxv2 app checking is always valid. while in other, we use if statment to check.
-
-		//event Dev_app(atId,~packagename,appSignature,deviceId);
-		//event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
-
-		
+		//attestation finished		
 		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
 			event D_finish() 
@@ -141,13 +132,13 @@ let DevServerKV2 =
 
 
 let AttestationAgent =
-	KnoxV2TA
+	SafetyNetTA
 
 let AtServer = 
-	AtServerKV2
+	AtServerSN
 
 let DevServer = 
-	DevServerKV2
+	DevServerSN
 
 
 let Device =
@@ -172,21 +163,8 @@ let pkAT = pk(~skAT) in
 
 (!Device || !DevServer || AtServer)
 
-lemma Correctness_D:
-exists-trace
-	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid')@i"
-
-/*
-lemma types [sources]:
-	"(All secret #i. SecretReceived(secret) @ i ==> 
-	( 
-	(Ex #j. KU(secret) @ j & j < i) 
-	| (Ex #j. SecretGenerated( secret ) @ j)
-	))"
-*/
 // for all valid attestation => (device must be not rooted and app must be not repacked).
-// move deviceStatus to secureworld.
-lemma SecretSecrecy:
+lemma DeviceAndAppIntegrity:
 	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i ==> 
 	( 
 	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
@@ -195,32 +173,9 @@ lemma SecretSecrecy:
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
 	))"
 
-/*
-lemma SecretSecrecy: 
-        "(not ( Ex secret #i #k. SecretGenerated(secret) @i & KU(secret) @k ))"
-
-lemma ApplicationIntegrity:
-	"(not ( Ex secret appId #i #k. SecretGenerated(secret) @i & ApplicationTampered(appId,secret) @k ))"
-
-lemma DeviceIntegrity:
-	"(not ( Ex secret deviceId #i #k. SecretGenerated(secret) @i & DeviceTampered(deviceId,secret) @k ))"
-
-lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-
-//Sanity check: Developer server finsihed
-lemma Correctness_D:
+//Sanity check: Attestation finished
+lemma Correctness_AT:
 exists-trace
-	"Ex #i. D_finish()@i"
+	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
 
-//Sanity check: Secure world/device Finished
-lemma Correctness_S:
-exists-trace
-	"Ex #i. S_finish()@i"
-	
-//Sanity check: Attesation server finished
-lemma Correctness_T:
-exists-trace
-	"Ex #i. T_finish()@i"
-	*/
 end

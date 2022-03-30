@@ -23,7 +23,7 @@
 	
 *******************************************************************************/
 
-theory KeyAttestation
+theory KeyAttestation_cdate
 begin
 
 builtins: signing, asymmetric-encryption
