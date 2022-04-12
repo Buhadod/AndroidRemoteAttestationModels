@@ -46,37 +46,28 @@ let AtServerKV2 =
 
 let KnoxV2TA =
 
-	new ~swId;
-
-	//setup a Secureworld
-	[SetUPSW(deviceId)]--[]->[FinishSetUPSW(~swId)];
-	
-	//retrieve an adversary's attempt to compomised the device
-	in(<status,customSoftwareMeasurement>);
-
 	!(
+		//retrieve an application + nonce
+		in(<nonce,packagename,content,sign(key,<packagename,content>)>);
 		
-		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(deviceId,~swId,nonce,packagename,content,sign(key,<packagename,content>))]--[]->[];
-
 		new ~atId;
-		event Attestating_App(~atId,packagename,sign(key,<packagename,content>),deviceId);
+		event Attestating_App(~atId,packagename,sign(key,<packagename,content>),~deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
 			let softwareMeasurement = customSoftwareMeasurement in
-			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
 			out(blob);
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce, ~deviceId>,<~skAT,'Trustzone'>) in 
 			//send attestation report to the app
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
 			out(blob);
 			event S_finish();
 			0
@@ -117,6 +108,12 @@ let DevServerKV2 =
 		//in knoxv2 app checking is always valid. because no app checking there.
 		event Verdict_app(atId,deviceId,hardwareMeasurement,'valid')
 
+		
+		
+
+
+
+
 	)
 
 
@@ -149,33 +146,13 @@ let Device =
 	//Create device reference
 	new ~deviceId;
 
+	//retrieve an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
 	//send the device refernece , allows an advsery to tamper the device
 	out(~deviceId);
-	
-	//setup a secureWorld
-	[]--[]-> [SetUPSW(~deviceId)];
-	[FinishSetUPSW(swId)]--[]->[];
-	event A_finished();
 
-	!(
-		//install an application
-		in(<packagename,content,sign(key,<packagename,content>)>);
-
-		event Application_Installed(~deviceId,packagename,content,sign(key,<packagename,content>));
-
-		//receive a nonce
-		in(nonce);
-
-		event NonceRecieved(nonce);
-
-		//attestation_agent send app data to secure world to start an attestation
-		[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,sign(key,<packagename,content>))];
-
-		
-		0
-		
-
-	)
+	AttestationAgent
 
 
 
@@ -184,7 +161,7 @@ new ~skAT;
 let pkAT = pk(~skAT) in
 
 
-(!Device || !DevServer || AtServer || !AttestationAgent)
+(!Device || !DevServer || AtServer)
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
@@ -196,28 +173,9 @@ lemma DeviceAndAppIntegrity:
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
 	))"
 
-// for all valid attestation => (device must be not rooted and app must be not repacked).
-lemma RepackedAppIntegrity:
-	"(All atId deviceId any #i. Verdict_app(atId,deviceId,'valid',any) @ i ==> 
-	( 
-	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex packagename appSignature fappSignature #j #k. 
-			 App_Created(packagename,appSignature) @ j 
-			 & Attestating_App(atId,packagename,fappSignature,deviceId)@ k
-			 & not(appSignature = fappSignature)
-			 
-			 )
-	))"
-
 //Sanity check: Attestation finished
 lemma Correctness_AT:
 exists-trace
 	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
-	
-
-//Sanity check: Attestation finished
-lemma Correctness_A:
-exists-trace
-	"Ex  #i. A_finished() @ i"
 	
 end
