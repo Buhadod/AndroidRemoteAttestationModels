@@ -54,33 +54,42 @@ let AtServerKV3 =
 
 let KnoxV3TA =
 
+	new ~swId;
+
+	//setup a Secureworld
+	[SetUPSW(deviceId)]--[]->[FinishSetUPSW(~swId)];
+	
+	//retrieve an adversary's attempt to compomised the device
+	in(<status,customSoftwareMeasurement>);
+
 	!(
-		//retrieve an application + nonce
-		in(<nonce,packagename,content,sign(key,<packagename,content>)>);
+		//attestation_agent send app data to secure world, start an attestation
+		[TOSW(deviceId,~swId,nonce,packagename,content,sign(key,<packagename,content>))]--[]->[];
+
 		
 		new ~tsid; //  attestation server hid session id
 		new ~atId; // attestation id
-		event Attestating_App(~atId,packagename,sign(key,<packagename,content>),~deviceId);
+		event Attestating_App(~atId,packagename,sign(key,<packagename,content>),deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
 			let softwareMeasurement = customSoftwareMeasurement in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,sign(key,<packagename,content>), ~deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,sign(key,<packagename,content>), deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			[]--[]-> [HttpsToAt(~tsid,blob)];
 			[HttpsFromAT(~tsid,hid)]--[]-> [];
-			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(hid);
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,sign(key,<packagename,content>), ~deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,sign(key,<packagename,content>), deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			[]--[]-> [HttpsToAt(~tsid,blob)];
 			[HttpsFromAT(~tsid,hid)]--[]-> [];
-			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(hid);
 			event S_finish();
 			0
@@ -158,14 +167,33 @@ let Device =
 	//Create device reference
 	new ~deviceId;
 
-	//retrieve an adversary's attempt to compomised the device
-	in(<status,customSoftwareMeasurement>);
-
 	//send the device refernece , allows an advsery to tamper the device
 	out(~deviceId);
+	
+	//setup a secureWorld
+	[]--[]-> [SetUPSW(~deviceId)];
+	[FinishSetUPSW(swId)]--[]->[];
+	event A_finished();
 
-	AttestationAgent
+	!(
+		//install an application
+		in(<packagename,content,sign(key,<packagename,content>)>);
 
+		event Application_Installed(~deviceId,packagename,content,sign(key,<packagename,content>));
+
+		//receive a nonce
+		in(nonce);
+
+		event NonceRecieved(nonce);
+
+		//attestation_agent send app data to secure world to start an attestation
+		[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,sign(key,<packagename,content>))];
+
+		
+		0
+		
+
+	)
 
 
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
@@ -173,7 +201,7 @@ new ~skAT;
 let pkAT = pk(~skAT) in
 
 
-(!Device || !DevServer || AtServer)
+(!Device || !DevServer || AtServer || !AttestationAgent)
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
@@ -183,6 +211,23 @@ lemma DeviceAndAppIntegrity:
 	& (Ex packagename appSignature #j #k. 
 			 App_Created(packagename,appSignature) @ j 
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
+	))"
+
+
+// for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
+lemma RepackedAppIntegrity:
+	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','invalid') @ i ==> 
+	( 
+	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex packagename fpackagename appSignature fappSignature #j #k. 
+			 App_Created(packagename,appSignature) @ j 
+			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+			 & (
+					(not(appSignature = fappSignature))
+					| (not(packagename = fpackagename))
+			 	)
+			 
+		)
 	))"
 
 //Sanity check: Attestation finished
