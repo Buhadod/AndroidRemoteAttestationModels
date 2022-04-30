@@ -29,7 +29,68 @@ equations:
           ) = SubjectTBSCertificateInfo
       
 
-/***************************************** SafetyNet HW *****************************************/
+
+/***************************************** Generic *****************************************/
+
+
+let HonestAppInstalltion =
+	event Checked('HonestAppInstalltion');
+	//install an application
+	[!App_Published(devId,packagename,content,appSignature)]--[]-> [];
+
+	event Application_Installed(~deviceId,packagename,content,appSignature);
+
+	//receive a nonce
+	[Nonce_Sent(devId,nonce)]--[]-> [];
+
+	event NonceRecieved(nonce);
+
+	//attestation_agent send app data to secure world to start an attestation
+	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+
+	0
+
+
+let ArbitraryAppInstalltion =
+	event Checked('ArbitraryAppInstalltion');
+	//install an application
+	in(<packagename,content>);
+	new ~hash;
+	let appSignature = ~hash in
+
+	event Application_Installed(~deviceId,packagename,content,appSignature);
+
+	//receive a nonce
+	in(nonce);
+
+	event NonceRecieved(nonce);
+
+	//attestation_agent send app data to secure world to start an attestation
+	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+
+	0
+
+let AppInstallation =
+	(HonestAppInstalltion + ArbitraryAppInstalltion)
+
+let Device =
+
+	//Create device reference
+	new ~deviceId;
+
+	//send the device refernece , allows an advsery to tamper the device
+	out(~deviceId);
+	
+	let status = 'valid' in
+	//setup a secureWorld
+	[]--[]-> [SetUPSW(~deviceId,status)];
+	[FinishSetUPSW(swId)]--[]->[];
+	event A_finished();
+
+	!AppInstallation
+
+
+/***************************************** Knox V3 *****************************************/
 
 let AtServerKA =
 	new ~rootSk;
@@ -46,8 +107,19 @@ let AtServerKA =
 		event T_finish() 
 	)
 
+let UnlockBootloader =
+	[SetUPSW(deviceId,status)]--[]->[];
+	if not(status = 'tamper') then
+		[]--[]->[SetUPSW(deviceId,'tamper')];
+		0
+
 let KeyMasterTA =
 
+	new ~swId;
+
+	//setup a Secureworld
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(~swId)];
+	
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
 	
@@ -55,38 +127,41 @@ let KeyMasterTA =
 	new ~keymasterSk;
 	let  intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keymasterSk),rootSk) in
 
+	//retrieve an adversary's attempt to compomised the device
+	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
+
 	!(
-		//retrieve an application + nonce
-		in(<nonce,packagename,content,sign(keyApp,<packagename,content>)>);
-		
+		//attestation_agent send app data to secure world, start an attestation
+		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+
 		new ~key;
 
 		new ~atId;
-		event Attestating_App(~atId,packagename,sign(keyApp,<packagename,content>),~deviceId);
+		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
 			let softwareMeasurement = customSoftwareMeasurement in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,sign(keyApp,<packagename,content>),~deviceId>,pk(~key),~keymasterSk) in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
-			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(certificateChain);
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,sign(keyApp,<packagename,content>),~deviceId>,pk(~key),~keymasterSk) in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
-			event DeviceStatus(~atId,~deviceId,hardwareMeasurement);
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(certificateChain);
 			event S_finish();
 			0
 			
 	)
-	
+
 
 let DevServerKA =
 
@@ -98,12 +173,15 @@ let DevServerKA =
 	let app = <~packagename,~content,appSignature> in
 	out(app);
 	event App_Created(~packagename,appSignature);
-	
+
+	new ~devId;
+	[]--[]-> [!App_Published(~devId,~packagename,~content,appSignature)];
 	!(
 	
 		// create a nonce
 		new ~nonce;
 		event NonceGenerated(~nonce);
+		[]--[]-> [Nonce_Sent(~devId,~nonce)];
 		out(~nonce);
 		
 		//retrieve blob from clients
@@ -128,12 +206,9 @@ let DevServerKA =
 		else
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
 			event D_finish() 
-		
-		
-		
+
+
 	)
-
-
 
 /*************************************** Generic code *************************************************/
 	
@@ -158,27 +233,12 @@ let DevServer =
 	DevServerKA
 
 
-let Device =
-
-	//Create device reference
-	new ~deviceId;
-
-	//retrieve an adversary's attempt to compomised the device
-	in(<status,customSoftwareMeasurement>);
-
-	//send the device refernece , allows an advsery to tamper the device
-	out(~deviceId);
-
-	AttestationAgent
-
 
 
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
-let pkAT = pk(~skAT) in
 
-
-(!Device || !DevServer || AtServer)
+(!Device || !DevServer || AtServer || !AttestationAgent || UnlockBootloader)
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
@@ -190,9 +250,40 @@ lemma DeviceAndAppIntegrity:
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
 	))"
 
+
+// for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
+lemma RepackedAppIntegrity:
+	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','invalid') @ i ==> 
+	( 
+	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex packagename fpackagename appSignature fappSignature #j #k. 
+			 App_Created(packagename,appSignature) @ j 
+			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+			 & (
+					(not(appSignature = fappSignature))
+					| (not(packagename = fpackagename))
+			 	)
+			 
+		)
+	))"
+
 //Sanity check: Attestation finished
-lemma Correctness_AT:
+lemma Correctness_Both_Valid:
 exists-trace
 	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
 
+//Sanity check: Attestation finished
+lemma Correctness_Rooting_Device:
+exists-trace
+	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
+
+
+lemma Correctness_TV:
+exists-trace
+	"Ex #i. Checked('HonestAppInstalltion') @ i"
+
+lemma Correctness_TI:
+exists-trace
+	"Ex #i. Checked('ArbitraryAppInstalltion') @ i"
+	
 end
