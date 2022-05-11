@@ -84,7 +84,7 @@ let Device =
 	let status = 'valid' in
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId,status)];
-	[FinishSetUPSW(swId)]--[]->[];
+	[FinishSetUPSW(~deviceId,swId)]--[]->[];
 	event A_finished();
 
 	!AppInstallation
@@ -118,7 +118,11 @@ let KeyMasterTA =
 	new ~swId;
 
 	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(~swId)];
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
+	
+	//retrieve an adversary's attempt to compomised the device
+	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
+	in(customSoftwareMeasurement);
 	
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];

@@ -84,7 +84,7 @@ let Device =
 	let status = 'valid' in
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId,status)];
-	[FinishSetUPSW(swId)]--[]->[];
+	[FinishSetUPSW(~deviceId,swId)]--[]->[];
 	event A_finished();
 
 	!AppInstallation
@@ -116,10 +116,11 @@ let GooglePlay =
 	new ~swId;
 
 	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(~swId)];
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
 	
 	//retrieve an adversary's attempt to compomised the device
 	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
+	in(customSoftwareMeasurement);
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
@@ -130,7 +131,7 @@ let GooglePlay =
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
+			let softwareMeasurement = customSoftwareMeasurement in
 			let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
