@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_KeyAttestation
+theory Framework_KeyAttestation_App_NoNonce
 begin
 
 builtins: signing, asymmetric-encryption
@@ -250,14 +250,15 @@ lemma CertPossible:
   exists-trace 
     "Ex requestID subjectCertificate intermediateCertificate rootCertificate #i #j.
         (AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-        & RequestCert(requestID)@j)"
+        & RequestCert(requestID)@j) & #j < #i "
 
 
 lemma CertFresh:
-    "All requestID subjectCertificate intermediateCertificate rootCertificate #i #j.
-        (AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-        & RequestCert(requestID)@j)
-            ==> Ex #k.CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k"
+    "All requestID subjectCertificate intermediateCertificate rootCertificate #i.
+        AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
+            ==>   Ex #j. RequestCert(requestID)@j
+			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
+			    & #j < #k & #k < #i" 
 
 
 
