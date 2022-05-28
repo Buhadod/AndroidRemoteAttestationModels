@@ -1,0 +1,2936 @@
+theory Framework_KeyAttestation_App_NoNonce begin
+
+// Function signature and definition of the equational theory E
+
+functions: adec/2, aenc/2, check_rep/2, create_certificate/3,
+           fst/1, get_rep/1, get_tbsInfo_certificate/1, pair/2, pk/1,
+           rep/2 [private], sign/2, snd/1, true/0, verify/3,
+           verify_certificate/2
+equations:
+    adec(aenc(x.1, pk(x.2)), x.2) = x.1,
+    check_rep(rep(x.1, x.2), x.2) = true,
+    create_certificate(SubjectTBSCertificateInfo, SubjectPup, IssuerSk)
+  = <SubjectTBSCertificateInfo, SubjectPup, 
+     sign(<SubjectTBSCertificateInfo, SubjectPup>, IssuerSk)>,
+    fst(<x.1, x.2>) = x.1,
+    get_rep(rep(x.1, x.2)) = x.1,
+    get_tbsInfo_certificate(<SubjectTBSCertificateInfo, pk(SubjectSk), 
+                             sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>, IssuerSk)>)
+  = SubjectTBSCertificateInfo,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true,
+    verify_certificate(<SubjectTBSCertificateInfo, pk(SubjectSk), 
+                        sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>, IssuerSk)>,
+                       <IssuerTBSCertificateInfo, pk(IssuerSk), 
+                        sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>, IssuerRootSk)>)
+  = true
+
+heuristic: p
+
+lemma CertPossible:
+  exists-trace
+  "∃ requestID subjectCertificate intermediateCertificate
+     rootCertificate #i #j.
+    ((AcceptCert( requestID,
+                  <subjectCertificate, intermediateCertificate, rootCertificate>
+      ) @ #i) ∧
+     (RequestCert( requestID ) @ #j)) ∧
+    (#j < #i)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ requestID subjectCertificate intermediateCertificate
+   rootCertificate #i #j.
+  (AcceptCert( requestID,
+               <subjectCertificate, intermediateCertificate, rootCertificate>
+   ) @ #i) ∧
+  (RequestCert( requestID ) @ #j)
+ ∧
+  #j < #i"
+*/
+by sorry
+
+lemma CertFresh:
+  all-traces
+  "∀ requestID subjectCertificate intermediateCertificate
+     rootCertificate #i.
+    (AcceptCert( requestID,
+                 <subjectCertificate, intermediateCertificate, rootCertificate>
+     ) @ #i) ⇒
+    (∃ #j.
+      (RequestCert( requestID ) @ #j) ∧
+      (∃ #k.
+        ((CreateCert( <subjectCertificate, intermediateCertificate, 
+                       rootCertificate>
+          ) @ #k) ∧
+         (#j < #k)) ∧
+        (#k < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ requestID subjectCertificate intermediateCertificate
+   rootCertificate #i.
+  (AcceptCert( requestID,
+               <subjectCertificate, intermediateCertificate, rootCertificate>
+   ) @ #i)
+ ∧
+  ∀ #j.
+   (RequestCert( requestID ) @ #j)
+  ⇒
+   ∀ #k.
+    (CreateCert( <subjectCertificate, intermediateCertificate, 
+                  rootCertificate>
+     ) @ #k)
+   ⇒
+    ((¬(#j < #k)) ∨ (¬(#k < #i)))"
+*/
+by sorry
+
+lemma DeviceAndAppIntegrity:
+  all-traces
+  "∀ atId deviceId #i.
+    (Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i) ⇒
+    ((∃ #j.
+       (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ∧ (#j < #i)) ∧
+     (∃ packagename appSignature #j #k.
+       (App_Created( packagename, appSignature ) @ #j) ∧
+       (Attestating_App( atId, packagename, appSignature, deviceId
+        ) @ #k)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ atId deviceId #i.
+  (Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i)
+ ∧
+  ((∀ #j.
+     (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ packagename appSignature #j #k.
+     (App_Created( packagename, appSignature ) @ #j) ∧
+     (Attestating_App( atId, packagename, appSignature, deviceId ) @ #k)
+    ⇒
+     ⊥))"
+*/
+simplify
+solve( (∀ #j.
+         (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∀ packagename appSignature #j #k.
+         (App_Created( packagename, appSignature ) @ #j) ∧
+         (Attestating_App( atId, packagename, appSignature, deviceId ) @ #k)
+        ⇒
+         ⊥) )
+  case case_1
+  solve( Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i )
+    case eventVerdictappatIddeviceIdhardwareMeasurementvalid_0_112111111111111111111121
+    solve( state_112111111111111111111121( ~advk, ~content, ~devId,
+                                           ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate,
+                                           deviceId, fappSignature, fpackagename, 'valid',
+                                           intermediateCertificate, rootCertificate,
+                                           subjectCertificate
+           ) ▶₀ #i )
+      case eventAcceptCertrequestIDsubjectCertificateintermediateCertificaterootCertificate_0_11211111111111111111112
+      solve( !KU( sign(<
+                        <atId, 'valid', cdate, ~packagename, 
+                         sign(~advk, <~packagename, ~content>), deviceId>, 
+                        pk(x.2)>,
+                       x.1)
+             ) @ #vk.18 )
+        case c_sign
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.23 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.27 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.28 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.31 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.30 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.30 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.30 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~keymasterSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~keymasterSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~rootSk ) @ #vk.23 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~rootSk ) @ #vk.23 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          by solve( !KU( ~keymasterSk ) @ #vk.28 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          by solve( !KU( ~keymasterSk ) @ #vk.28 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          by solve( !KU( ~rootSk ) @ #vk.23 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          by solve( !KU( ~rootSk ) @ #vk.23 )
+        qed
+      next
+        case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i )
+    case eventVerdictappatIddeviceIdhardwareMeasurementvalid_0_112111111111111111111121
+    solve( state_112111111111111111111121( ~advk, ~content, ~devId,
+                                           ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate,
+                                           deviceId, fappSignature, fpackagename, 'valid',
+                                           intermediateCertificate, rootCertificate,
+                                           subjectCertificate
+           ) ▶₀ #i )
+      case eventAcceptCertrequestIDsubjectCertificateintermediateCertificaterootCertificate_0_11211111111111111111112
+      solve( !KU( sign(<
+                        <atId, 'valid', cdate, ~packagename, 
+                         sign(~advk, <~packagename, ~content>), deviceId>, 
+                        pk(x.2)>,
+                       x.1)
+             ) @ #vk.18 )
+        case c_sign
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.23 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.27 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.28 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.31 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.30 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.30 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.30 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.30 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~keymasterSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~keymasterSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.75 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~rootSk ) @ #vk.23 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.68 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            by solve( !KU( ~rootSk ) @ #vk.23 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          by solve( !KU( ~keymasterSk ) @ #vk.28 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          by solve( !KU( ~keymasterSk ) @ #vk.28 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          by solve( !KU( ~rootSk ) @ #vk.23 )
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          by solve( !KU( ~rootSk ) @ #vk.23 )
+        qed
+      next
+        case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma RepackedAppIntegrity:
+  all-traces
+  "∀ atId deviceId #i.
+    (Verdict_app( atId, deviceId, 'valid', 'invalid' ) @ #i) ⇒
+    ((∃ #j.
+       (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ∧ (#j < #i)) ∧
+     (∃ packagename fpackagename appSignature fappSignature #j #k.
+       ((App_Created( packagename, appSignature ) @ #j) ∧
+        (Attestating_App( atId, fpackagename, fappSignature, deviceId
+         ) @ #k)) ∧
+       ((¬(appSignature = fappSignature)) ∨
+        (¬(packagename = fpackagename)))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ atId deviceId #i.
+  (Verdict_app( atId, deviceId, 'valid', 'invalid' ) @ #i)
+ ∧
+  ((∀ #j.
+     (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ packagename fpackagename appSignature fappSignature #j #k.
+     (App_Created( packagename, appSignature ) @ #j) ∧
+     (Attestating_App( atId, fpackagename, fappSignature, deviceId
+      ) @ #k)
+    ⇒
+     (appSignature = fappSignature) ∧ (packagename = fpackagename)))"
+*/
+simplify
+solve( (∀ #j.
+         (DeviceStatus( atId, deviceId, 'valid' ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∀ packagename fpackagename appSignature fappSignature #j #k.
+         (App_Created( packagename, appSignature ) @ #j) ∧
+         (Attestating_App( atId, fpackagename, fappSignature, deviceId
+          ) @ #k)
+        ⇒
+         (appSignature = fappSignature) ∧ (packagename = fpackagename)) )
+  case case_1
+  solve( Verdict_app( atId, deviceId, 'valid', 'invalid' ) @ #i )
+    case eventVerdictappatIddeviceIdhardwareMeasurementinvalid_0_11211111111111111111111
+    solve( state_11211111111111111111111( ~advk, ~content, ~devId,
+                                          ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate,
+                                          deviceId, fappSignature, fpackagename, 'valid',
+                                          intermediateCertificate, rootCertificate,
+                                          subjectCertificate
+           ) ▶₀ #i )
+      case ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111
+      solve( (¬(sign(~advk, <~packagename, ~content>) =
+                fappSignature))  ∥
+             (¬(~packagename = fpackagename)) )
+        case case_1
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.22 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.26 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.27 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.30 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.34 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.25 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by contradiction /* from formulas */
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.34 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by contradiction /* from formulas */
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.25 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.29 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.22 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.26 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.27 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.30 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.34 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.25 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by contradiction /* from formulas */
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.34 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by contradiction /* from formulas */
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.25 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.29 )
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Verdict_app( atId, deviceId, 'valid', 'invalid' ) @ #i )
+    case eventVerdictappatIddeviceIdhardwareMeasurementinvalid_0_11211111111111111111111
+    solve( state_11211111111111111111111( ~advk, ~content, ~devId,
+                                          ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate,
+                                          deviceId, fappSignature, fpackagename, 'valid',
+                                          intermediateCertificate, rootCertificate,
+                                          subjectCertificate
+           ) ▶₀ #i )
+      case ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111
+      solve( (¬(sign(~advk, <~packagename, ~content>) =
+                fappSignature))  ∥
+             (¬(~packagename = fpackagename)) )
+        case case_1
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.22 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.26 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.27 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.30 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.34 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.25 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.34 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.25 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.29 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !KU( sign(<x, pk(x.1)>, ~rootSk) ) @ #vk.22 )
+          case c_sign
+          solve( !KU( pk(~rootSk) ) @ #vk.26 )
+            case c_pk
+            solve( !KU( sign(<'TbsInfo', pk(~rootSk)>, ~rootSk) ) @ #vk.27 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+              solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+                case SetUPSWdeviceIdtamper_0_112121211
+                by contradiction /* from formulas */
+              next
+                case SetUPSWdeviceIdvalid_0_11111
+                by solve( !KU( ~rootSk ) @ #vk.28 )
+              qed
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            next
+              case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+            solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+              case SetUPSWdeviceIdtamper_0_112121211
+              by contradiction /* from formulas */
+            next
+              case SetUPSWdeviceIdvalid_0_11111
+              by solve( !KU( ~rootSk ) @ #vk.28 )
+            qed
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+            by solve( !KU( ~rootSk ) @ #vk.28 )
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_1
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.30 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_2
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~keymasterSk)
+                   ) @ #vk.20 )
+              case c_sign
+              by solve( !KU( ~keymasterSk ) @ #vk.34 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_3
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.74 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.25 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111_case_4
+          solve( SetUPSW( ~deviceId.1, status ) ▶₁ #vr.67 )
+            case SetUPSWdeviceIdtamper_0_112121211
+            by contradiction /* from formulas */
+          next
+            case SetUPSWdeviceIdvalid_0_11111
+            solve( !KU( sign(<
+                              <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                              pk(x)>,
+                             ~rootSk)
+                   ) @ #vk.19 )
+              case c_sign
+              by solve( !KU( ~rootSk ) @ #vk.29 )
+            qed
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_1
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.30 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_2
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~keymasterSk)
+                 ) @ #vk.19 )
+            case c_sign
+            by solve( !KU( ~keymasterSk ) @ #vk.34 )
+          next
+            case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211
+            by contradiction /* from formulas */
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_3
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.25 )
+          qed
+        next
+          case outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211_case_4
+          solve( !KU( sign(<
+                            <atId, 'valid', cdate, fpackagename, fappSignature, deviceId>, 
+                            pk(x)>,
+                           ~rootSk)
+                 ) @ #vk.18 )
+            case c_sign
+            by solve( !KU( ~rootSk ) @ #vk.29 )
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma Correctness_Both_Valid:
+  exists-trace
+  "∃ atId deviceId #i.
+    Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ atId deviceId #i.
+  (Verdict_app( atId, deviceId, 'valid', 'valid' ) @ #i)"
+*/
+by sorry
+
+lemma Correctness_Rooting_Device:
+  exists-trace
+  "∃ atId any deviceId #i.
+    Verdict_app( atId, deviceId, 'invalid', any ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ atId any deviceId #i.
+  (Verdict_app( atId, deviceId, 'invalid', any ) @ #i)"
+*/
+by sorry
+
+lemma Correctness_TV:
+  exists-trace "∃ #i. Checked( 'HonestAppInstalltion' ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ #i. (Checked( 'HonestAppInstalltion' ) @ #i)"
+*/
+simplify
+solve( Checked( 'HonestAppInstalltion' ) @ #i )
+  case eventCheckedHonestAppInstalltion_0_1111111111
+  solve( state_111111111( ~deviceId, ~skAT, swId ) ▶₀ #i )
+    case __1_11111111_case_1
+    SOLVED // trace found
+  qed
+qed
+
+lemma Correctness_TI:
+  exists-trace "∃ #i. Checked( 'ArbitraryAppInstalltion' ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ #i. (Checked( 'ArbitraryAppInstalltion' ) @ #i)"
+*/
+simplify
+solve( Checked( 'ArbitraryAppInstalltion' ) @ #i )
+  case eventCheckedArbitraryAppInstalltion_0_1111111112
+  solve( state_111111111( ~deviceId, ~skAT, swId ) ▶₀ #i )
+    case __1_11111111_case_1
+    SOLVED // trace found
+  qed
+qed
+
+rule (modulo E) Init[color=#ffffff process=new ~skAT;]:
+   [ ] --[ Init( ) ]-> [ state_( ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newskAT_0_[color=#ffffff process=new ~skAT;]:
+   [ state_( ), Fr( ~skAT ) ] --> [ state_1( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1[color=#ffffff process=!]:
+   [ state_1( ~skAT ) ] --> [ !semistate_11( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_1[color=#ffffff process=!]:
+   [ !semistate_11( ~skAT ) ] --> [ state_11( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11[color=#ffffff process=|]:
+   [ state_11( ~skAT ) ]
+  -->
+   [ state_111( ~skAT ), state_112( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newdeviceId_0_111[color=#708040 process=new ~deviceId;]:
+   [ state_111( ~skAT ), Fr( ~deviceId ) ]
+  -->
+   [ state_1111( ~deviceId, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) outdeviceId_0_1111[color=#708040 process=out(~deviceId);]:
+   [ state_1111( ~deviceId, ~skAT ) ]
+  -->
+   [ state_11111( ~deviceId, ~skAT ), Out( ~deviceId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SetUPSWdeviceIdvalid_0_11111[color=#708040 process= [ ] --> [ SetUPSW( ~deviceId, 'valid' ) ];]:
+   [ state_11111( ~deviceId, ~skAT ) ]
+  -->
+   [ state_111111( ~deviceId, ~skAT ), SetUPSW( ~deviceId, 'valid' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) FinishSetUPSWdeviceIdswId_0_111111[color=#708040 process= [ FinishSetUPSW( ~deviceId, swId ) ] --> [ ];]:
+   [
+   state_111111( ~deviceId, ~skAT ), FinishSetUPSW( ~deviceId, swId )
+   ]
+  -->
+   [ state_1111111( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventAfinished_0_1111111[color=#708040 process=event A_finished( );]:
+   [ state_1111111( ~deviceId, ~skAT, swId ) ]
+  --[ A_finished( ) ]->
+   [ state_11111111( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11111111[color=#708040 process=!]:
+   [ state_11111111( ~deviceId, ~skAT, swId ) ]
+  -->
+   [ !semistate_111111111( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_11111111[color=#708040 process=!]:
+   [ !semistate_111111111( ~deviceId, ~skAT, swId ) ]
+  -->
+   [ state_111111111( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventCheckedHonestAppInstalltion_0_1111111111[color=#714080 process=event Checked( 'HonestAppInstalltion' );]:
+   [ state_111111111( ~deviceId, ~skAT, swId ) ]
+  --[ Checked( 'HonestAppInstalltion' ) ]->
+   [ state_11111111111( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AppPublisheddevIdpackagenamecontentappSignature_0_11111111111[color=#714080 process= [ !App_Published( devId, packagename, content, appSignature ) ]
+-->
+ [ ];]:
+   [
+   state_11111111111( ~deviceId, ~skAT, swId ),
+   !App_Published( devId, packagename, content, appSignature )
+   ]
+  -->
+   [
+   state_111111111111( ~deviceId, ~skAT, appSignature, content, devId,
+                       packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventApplicationInstalleddeviceIdpackagenamecontentappSignature_0_111111111111[color=#714080 process=event Application_Installed( ~deviceId, packagename, content,
+                       appSignature
+);]:
+   [
+   state_111111111111( ~deviceId, ~skAT, appSignature, content, devId,
+                       packagename, swId
+   )
+   ]
+  --[
+  Application_Installed( ~deviceId, packagename, content,
+                         appSignature
+  )
+  ]->
+   [
+   state_1111111111111( ~deviceId, ~skAT, appSignature, content,
+                        devId, packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1111111111111[color=#714080 process=!]:
+   [
+   state_1111111111111( ~deviceId, ~skAT, appSignature, content,
+                        devId, packagename, swId
+   )
+   ]
+  -->
+   [
+   !semistate_11111111111111( ~deviceId, ~skAT, appSignature, content,
+                              devId, packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_1111111111111[color=#714080 process=!]:
+   [
+   !semistate_11111111111111( ~deviceId, ~skAT, appSignature, content,
+                              devId, packagename, swId
+   )
+   ]
+  -->
+   [
+   state_11111111111111( ~deviceId, ~skAT, appSignature, content,
+                         devId, packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RequestCertdevId_0_11111111111111[color=#6d4080 process= [ Request_Cert( devId ) ] --> [ ];]:
+   [
+   state_11111111111111( ~deviceId, ~skAT, appSignature, content,
+                         devId, packagename, swId
+   ),
+   Request_Cert( devId )
+   ]
+  -->
+   [
+   state_111111111111111( ~deviceId, ~skAT, appSignature, content,
+                          devId, packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TOSWdeviceIdswIdpackagenamecontentappSignature_0_111111111111111[color=#6d4080 process= [ ]
+-->
+ [ TOSW( ~deviceId, swId, packagename, content, appSignature ) ];]:
+   [
+   state_111111111111111( ~deviceId, ~skAT, appSignature, content,
+                          devId, packagename, swId
+   )
+   ]
+  -->
+   [
+   state_1111111111111111( ~deviceId, ~skAT, appSignature, content,
+                           devId, packagename, swId
+   ),
+   TOSW( ~deviceId, swId, packagename, content, appSignature )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1111111111111111[color=#6d4080 process=0]:
+   [
+   state_1111111111111111( ~deviceId, ~skAT, appSignature, content,
+                           devId, packagename, swId
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventCheckedArbitraryAppInstalltion_0_1111111112[color=#405180 process=event Checked( 'ArbitraryAppInstalltion' );]:
+   [ state_111111111( ~deviceId, ~skAT, swId ) ]
+  --[ Checked( 'ArbitraryAppInstalltion' ) ]->
+   [ state_11111111121( ~deviceId, ~skAT, swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) inpackagenamecontent_0_11111111121[color=#405180 process=in(<packagename, content>);]:
+   [
+   state_11111111121( ~deviceId, ~skAT, swId ),
+   In( <packagename, content> )
+   ]
+  -->
+   [
+   state_111111111211( ~deviceId, ~skAT, content, packagename, swId )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newhash_0_111111111211[color=#405180 process=new ~hash;]:
+   [
+   state_111111111211( ~deviceId, ~skAT, content, packagename, swId ),
+   Fr( ~hash )
+   ]
+  -->
+   [
+   state_1111111112111( ~deviceId, ~hash, ~skAT, content, packagename,
+                        swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventApplicationInstalleddeviceIdpackagenamecontenthash_0_1111111112111[color=#405180 process=event Application_Installed( ~deviceId, packagename, content, ~hash );]:
+   [
+   state_1111111112111( ~deviceId, ~hash, ~skAT, content, packagename,
+                        swId
+   )
+   ]
+  --[ Application_Installed( ~deviceId, packagename, content, ~hash )
+  ]->
+   [
+   state_11111111121111( ~deviceId, ~hash, ~skAT, content,
+                         packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11111111121111[color=#405180 process=!]:
+   [
+   state_11111111121111( ~deviceId, ~hash, ~skAT, content,
+                         packagename, swId
+   )
+   ]
+  -->
+   [
+   !semistate_111111111211111( ~deviceId, ~hash, ~skAT, content,
+                               packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_11111111121111[color=#405180 process=!]:
+   [
+   !semistate_111111111211111( ~deviceId, ~hash, ~skAT, content,
+                               packagename, swId
+   )
+   ]
+  -->
+   [
+   state_111111111211111( ~deviceId, ~hash, ~skAT, content,
+                          packagename, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) inrequest_0_111111111211111[color=#404080 process=in(request);]:
+   [
+   state_111111111211111( ~deviceId, ~hash, ~skAT, content,
+                          packagename, swId
+   ),
+   In( request )
+   ]
+  -->
+   [
+   state_1111111112111111( ~deviceId, ~hash, ~skAT, content,
+                           packagename, request, swId
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TOSWdeviceIdswIdpackagenamecontenthash_0_1111111112111111[color=#404080 process= [ ] --> [ TOSW( ~deviceId, swId, packagename, content, ~hash ) ];]:
+   [
+   state_1111111112111111( ~deviceId, ~hash, ~skAT, content,
+                           packagename, request, swId
+   )
+   ]
+  -->
+   [
+   state_11111111121111111( ~deviceId, ~hash, ~skAT, content,
+                            packagename, request, swId
+   ),
+   TOSW( ~deviceId, swId, packagename, content, ~hash )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11111111121111111[color=#404080 process=0]:
+   [
+   state_11111111121111111( ~deviceId, ~hash, ~skAT, content,
+                            packagename, request, swId
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_112[color=#ffffff process=!]:
+   [ state_112( ~skAT ) ] --> [ !semistate_1121( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_112[color=#ffffff process=!]:
+   [ !semistate_1121( ~skAT ) ] --> [ state_1121( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1121[color=#ffffff process=|]:
+   [ state_1121( ~skAT ) ]
+  -->
+   [ state_11211( ~skAT ), state_11212( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11211[color=#ffffff process=|]:
+   [ state_11211( ~skAT ) ]
+  -->
+   [ state_112111( ~skAT ), state_112112( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newadvk_0_112111[color=#805a40 process=new ~advk;]:
+   [ state_112111( ~skAT ), Fr( ~advk ) ]
+  -->
+   [ state_1121111( ~advk, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newcontent_0_1121111[color=#805a40 process=new ~content;]:
+   [ state_1121111( ~advk, ~skAT ), Fr( ~content ) ]
+  -->
+   [ state_11211111( ~advk, ~content, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newpackagename_0_11211111[color=#805a40 process=new ~packagename;]:
+   [ state_11211111( ~advk, ~content, ~skAT ), Fr( ~packagename ) ]
+  -->
+   [ state_112111111( ~advk, ~content, ~packagename, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) outpackagenamecontentsignadvkpackagenamecontent_0_112111111[color=#805a40 process=out(<~packagename, ~content, sign(~advk, <~packagename, ~content>)>);]:
+   [ state_112111111( ~advk, ~content, ~packagename, ~skAT ) ]
+  -->
+   [
+   state_1121111111( ~advk, ~content, ~packagename, ~skAT ),
+   Out( <~packagename, ~content, sign(~advk, <~packagename, ~content>)
+        >
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventAppCreatedpackagenamesignadvkpackagenamecontent_0_1121111111[color=#805a40 process=event App_Created( ~packagename, sign(~advk, <~packagename, ~content>) );]:
+   [ state_1121111111( ~advk, ~content, ~packagename, ~skAT ) ]
+  --[
+  App_Created( ~packagename, sign(~advk, <~packagename, ~content>) )
+  ]->
+   [ state_11211111111( ~advk, ~content, ~packagename, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newdevId_0_11211111111[color=#805a40 process=new ~devId;]:
+   [
+   state_11211111111( ~advk, ~content, ~packagename, ~skAT ),
+   Fr( ~devId )
+   ]
+  -->
+   [
+   state_112111111111( ~advk, ~content, ~devId, ~packagename, ~skAT )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AppPublisheddevIdpackagenamecontentsignadvkpackagenamecontent_0_112111111111[color=#805a40 process= [ ]
+-->
+ [
+ !App_Published( ~devId, ~packagename, ~content,
+                 sign(~advk, <~packagename, ~content>)
+ )
+ ];]:
+   [
+   state_112111111111( ~advk, ~content, ~devId, ~packagename, ~skAT )
+   ]
+  -->
+   [
+   state_1121111111111( ~advk, ~content, ~devId, ~packagename, ~skAT
+   ),
+   !App_Published( ~devId, ~packagename, ~content,
+                   sign(~advk, <~packagename, ~content>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1121111111111[color=#805a40 process=!]:
+   [
+   state_1121111111111( ~advk, ~content, ~devId, ~packagename, ~skAT )
+   ]
+  -->
+   [
+   !semistate_11211111111111( ~advk, ~content, ~devId, ~packagename,
+                              ~skAT
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_1121111111111[color=#805a40 process=!]:
+   [
+   !semistate_11211111111111( ~advk, ~content, ~devId, ~packagename,
+                              ~skAT
+   )
+   ]
+  -->
+   [
+   state_11211111111111( ~advk, ~content, ~devId, ~packagename, ~skAT
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newrequestID_0_11211111111111[color=#805a40 process=new ~requestID;]:
+   [
+   state_11211111111111( ~advk, ~content, ~devId, ~packagename, ~skAT
+   ),
+   Fr( ~requestID )
+   ]
+  -->
+   [
+   state_112111111111111( ~advk, ~content, ~devId, ~packagename,
+                          ~requestID, ~skAT
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventRequestCertrequestID_0_112111111111111[color=#805a40 process=event RequestCert( ~requestID );]:
+   [
+   state_112111111111111( ~advk, ~content, ~devId, ~packagename,
+                          ~requestID, ~skAT
+   )
+   ]
+  --[ RequestCert( ~requestID ) ]->
+   [
+   state_1121111111111111( ~advk, ~content, ~devId, ~packagename,
+                           ~requestID, ~skAT
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RequestCertdevId_0_1121111111111111[color=#805a40 process= [ ] --> [ Request_Cert( ~devId ) ];]:
+   [
+   state_1121111111111111( ~advk, ~content, ~devId, ~packagename,
+                           ~requestID, ~skAT
+   )
+   ]
+  -->
+   [
+   state_11211111111111111( ~advk, ~content, ~devId, ~packagename,
+                            ~requestID, ~skAT
+   ),
+   Request_Cert( ~devId )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) insubjectCertificateintermediateCertificaterootCertificate_0_11211111111111111[color=#805a40 process=in(<subjectCertificate, intermediateCertificate, rootCertificate>);]:
+   [
+   state_11211111111111111( ~advk, ~content, ~devId, ~packagename,
+                            ~requestID, ~skAT
+   ),
+   In( <subjectCertificate, intermediateCertificate, rootCertificate>
+   )
+   ]
+  -->
+   [
+   state_112111111111111111( ~advk, ~content, ~devId, ~packagename,
+                             ~requestID, ~skAT, intermediateCertificate, rootCertificate,
+                             subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) GetRootCertificaterootCertificate_0_112111111111111111[color=#805a40 process= [ !GetRootCertificate( rootCertificate ) ] --> [ ];]:
+   [
+   state_112111111111111111( ~advk, ~content, ~devId, ~packagename,
+                             ~requestID, ~skAT, intermediateCertificate, rootCertificate,
+                             subjectCertificate
+   ),
+   !GetRootCertificate( rootCertificate )
+   ]
+  -->
+   [
+   state_1121111111111111111( ~advk, ~content, ~devId, ~packagename,
+                              ~requestID, ~skAT, intermediateCertificate, rootCertificate,
+                              subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newvsid_0_1121111111111111111[color=#805a40 process=new ~vsid;]:
+   [
+   state_1121111111111111111( ~advk, ~content, ~devId, ~packagename,
+                              ~requestID, ~skAT, intermediateCertificate, rootCertificate,
+                              subjectCertificate
+   ),
+   Fr( ~vsid )
+   ]
+  -->
+   [
+   state_11211111111111111111( ~advk, ~content, ~devId, ~packagename,
+                               ~requestID, ~skAT, ~vsid, intermediateCertificate, rootCertificate,
+                               subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) VerficationCertificatehainverificationvsidverifycertificatesubjectCertificateintermediateCertificateverifycertificateintermediateCertificaterootCertificateverifycertificaterootCertificaterootCertificategettbsInfocertificatesubjectCertificate_0_11211111111111111111[color=#805a40 process= [ ]
+-->
+ [
+ VerficationCertificatehain( 'verification',
+                             <~vsid, 
+                              verify_certificate(subjectCertificate, intermediateCertificate), 
+                              verify_certificate(intermediateCertificate, rootCertificate), 
+                              verify_certificate(rootCertificate, rootCertificate), 
+                              get_tbsInfo_certificate(subjectCertificate)>
+ )
+ ];]:
+   [
+   state_11211111111111111111( ~advk, ~content, ~devId, ~packagename,
+                               ~requestID, ~skAT, ~vsid, intermediateCertificate, rootCertificate,
+                               subjectCertificate
+   )
+   ]
+  -->
+   [
+   state_112111111111111111111( ~advk, ~content, ~devId, ~packagename,
+                                ~requestID, ~skAT, ~vsid, intermediateCertificate, rootCertificate,
+                                subjectCertificate
+   ),
+   VerficationCertificatehain( 'verification',
+                               <~vsid, 
+                                verify_certificate(subjectCertificate, intermediateCertificate), 
+                                verify_certificate(intermediateCertificate, rootCertificate), 
+                                verify_certificate(rootCertificate, rootCertificate), 
+                                get_tbsInfo_certificate(subjectCertificate)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) VerficationCertificatehainverificationvsidverifycertificatesubjectCertificateintermediateCertificateverifycertificateintermediateCertificaterootCertificateverifycertificaterootCertificaterootCertificategettbsInfocertificatesubjectCertificate_0_11211111111111111111[color=#805a40 process= [ ]
+-->
+ [
+ VerficationCertificatehain( 'verification',
+                             <~vsid, 
+                              verify_certificate(subjectCertificate, intermediateCertificate), 
+                              verify_certificate(intermediateCertificate, rootCertificate), 
+                              verify_certificate(rootCertificate, rootCertificate), 
+                              get_tbsInfo_certificate(subjectCertificate)>
+ )
+ ];]:
+     [
+     state_11211111111111111111( ~advk, ~content, ~devId, ~packagename,
+                                 ~requestID, ~skAT, ~vsid, intermediateCertificate, rootCertificate,
+                                 subjectCertificate
+     )
+     ]
+    -->
+     [
+     state_112111111111111111111( ~advk, ~content, ~devId, ~packagename,
+                                  ~requestID, ~skAT, ~vsid, intermediateCertificate,
+                                  rootCertificate, subjectCertificate
+     ),
+     VerficationCertificatehain( 'verification',
+                                 <~vsid, z, z.1, z.2, z.3>
+     )
+     ]
+    variants (modulo AC)
+     1. intermediateCertificate
+              = intermediateCertificate.17
+        rootCertificate
+              = rootCertificate.18
+        subjectCertificate
+              = subjectCertificate.19
+        z     = verify_certificate(subjectCertificate.19,
+                                   intermediateCertificate.17)
+        z.1   = verify_certificate(intermediateCertificate.17,
+                                   rootCertificate.18)
+        z.2   = verify_certificate(rootCertificate.18, rootCertificate.18)
+        z.3   = get_tbsInfo_certificate(subjectCertificate.19)
+    
+     2. intermediateCertificate
+              = intermediateCertificate.19
+        rootCertificate
+              = <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.28)>
+        subjectCertificate
+              = subjectCertificate.21
+        z     = verify_certificate(subjectCertificate.21,
+                                   intermediateCertificate.19)
+        z.1   = verify_certificate(intermediateCertificate.19,
+                                   <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.28)>)
+        z.2   = true
+        z.3   = get_tbsInfo_certificate(subjectCertificate.21)
+    
+     3. intermediateCertificate
+              = intermediateCertificate.20
+        rootCertificate
+              = rootCertificate.21
+        subjectCertificate
+              = <z.27, pk(x.29), sign(<z.27, pk(x.29)>, x.30)>
+        z     = verify_certificate(<z.27, pk(x.29), 
+                                    sign(<z.27, pk(x.29)>, x.30)>,
+                                   intermediateCertificate.20)
+        z.1   = verify_certificate(intermediateCertificate.20,
+                                   rootCertificate.21)
+        z.2   = verify_certificate(rootCertificate.21, rootCertificate.21)
+        z.3   = z.27
+    
+     4. intermediateCertificate
+              = intermediateCertificate.22
+        rootCertificate
+              = <x.30, pk(x.31), sign(<x.30, pk(x.31)>, x.31)>
+        subjectCertificate
+              = <z.29, pk(x.33), sign(<z.29, pk(x.33)>, x.34)>
+        z     = verify_certificate(<z.29, pk(x.33), 
+                                    sign(<z.29, pk(x.33)>, x.34)>,
+                                   intermediateCertificate.22)
+        z.1   = verify_certificate(intermediateCertificate.22,
+                                   <x.30, pk(x.31), sign(<x.30, pk(x.31)>, x.31)>)
+        z.2   = true
+        z.3   = z.29
+    
+     5. intermediateCertificate
+              = <x.23, pk(x.24), sign(<x.23, pk(x.24)>, x.25)>
+        rootCertificate
+              = <x.26, pk(x.25), sign(<x.26, pk(x.25)>, x.25)>
+        subjectCertificate
+              = <z.22, pk(x.28), sign(<z.22, pk(x.28)>, x.24)>
+        z     = true
+        z.1   = true
+        z.2   = true
+        z.3   = z.22
+    
+     6. intermediateCertificate
+              = <x.24, pk(x.25), sign(<x.24, pk(x.25)>, x.26)>
+        rootCertificate
+              = <x.27, pk(x.26), sign(<x.27, pk(x.26)>, x.26)>
+        subjectCertificate
+              = <z.23, pk(x.29), sign(<z.23, pk(x.29)>, x.30)>
+        z     = verify_certificate(<z.23, pk(x.29), 
+                                    sign(<z.23, pk(x.29)>, x.30)>,
+                                   <x.24, pk(x.25), sign(<x.24, pk(x.25)>, x.26)>)
+        z.1   = true
+        z.2   = true
+        z.3   = z.23
+    
+     7. intermediateCertificate
+              = <x.24, pk(x.25), sign(<x.24, pk(x.25)>, x.26)>
+        rootCertificate
+              = <x.27, pk(x.26), sign(<x.27, pk(x.26)>, x.28)>
+        subjectCertificate
+              = <z.23, pk(x.30), sign(<z.23, pk(x.30)>, x.25)>
+        z     = true
+        z.1   = true
+        z.2   = verify_certificate(<x.27, pk(x.26), 
+                                    sign(<x.27, pk(x.26)>, x.28)>,
+                                   <x.27, pk(x.26), sign(<x.27, pk(x.26)>, x.28)>)
+        z.3   = z.23
+    
+     8. intermediateCertificate
+              = <x.24, pk(x.25), sign(<x.24, pk(x.25)>, x.26)>
+        rootCertificate
+              = <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.28)>
+        subjectCertificate
+              = <z.23, pk(x.30), sign(<z.23, pk(x.30)>, x.25)>
+        z     = true
+        z.1   = verify_certificate(<x.24, pk(x.25), 
+                                    sign(<x.24, pk(x.25)>, x.26)>,
+                                   <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.28)>)
+        z.2   = true
+        z.3   = z.23
+    
+     9. intermediateCertificate
+              = <x.25, pk(x.26), sign(<x.25, pk(x.26)>, x.27)>
+        rootCertificate
+              = <x.28, pk(x.27), sign(<x.28, pk(x.27)>, x.29)>
+        subjectCertificate
+              = <z.24, pk(x.31), sign(<z.24, pk(x.31)>, x.32)>
+        z     = verify_certificate(<z.24, pk(x.31), 
+                                    sign(<z.24, pk(x.31)>, x.32)>,
+                                   <x.25, pk(x.26), sign(<x.25, pk(x.26)>, x.27)>)
+        z.1   = true
+        z.2   = verify_certificate(<x.28, pk(x.27), 
+                                    sign(<x.28, pk(x.27)>, x.29)>,
+                                   <x.28, pk(x.27), sign(<x.28, pk(x.27)>, x.29)>)
+        z.3   = z.24
+    
+    10. intermediateCertificate
+              = <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.29)>
+        rootCertificate
+              = <x.30, pk(x.29), sign(<x.30, pk(x.29)>, x.29)>
+        subjectCertificate
+              = subjectCertificate.21
+        z     = verify_certificate(subjectCertificate.21,
+                                   <x.27, pk(x.28), sign(<x.27, pk(x.28)>, x.29)>)
+        z.1   = true
+        z.2   = true
+        z.3   = get_tbsInfo_certificate(subjectCertificate.21)
+    
+    11. intermediateCertificate
+              = <x.28, pk(x.29), sign(<x.28, pk(x.29)>, x.30)>
+        rootCertificate
+              = <x.31, pk(x.30), sign(<x.31, pk(x.30)>, x.32)>
+        subjectCertificate
+              = subjectCertificate.22
+        z     = verify_certificate(subjectCertificate.22,
+                                   <x.28, pk(x.29), sign(<x.28, pk(x.29)>, x.30)>)
+        z.1   = true
+        z.2   = verify_certificate(<x.31, pk(x.30), 
+                                    sign(<x.31, pk(x.30)>, x.32)>,
+                                   <x.31, pk(x.30), sign(<x.31, pk(x.30)>, x.32)>)
+        z.3   = get_tbsInfo_certificate(subjectCertificate.22)
+    
+    12. intermediateCertificate
+              = <x.30, pk(x.31), sign(<x.30, pk(x.31)>, x.32)>
+        rootCertificate
+              = rootCertificate.23
+        subjectCertificate
+              = <z.29, pk(x.35), sign(<z.29, pk(x.35)>, x.31)>
+        z     = true
+        z.1   = verify_certificate(<x.30, pk(x.31), 
+                                    sign(<x.30, pk(x.31)>, x.32)>,
+                                   rootCertificate.23)
+        z.2   = verify_certificate(rootCertificate.23, rootCertificate.23)
+        z.3   = z.29
+  */
+
+rule (modulo E) VerficationCertificatehainverificationvsidtruetruetrueatIdhardwareMeasurementcdatefpackagenamefappSignaturedeviceId_0_112111111111111111111[color=#805a40 process= [
+ VerficationCertificatehain( 'verification',
+                             <~vsid, true, true, true, atId, hardwareMeasurement, cdate, 
+                              fpackagename, fappSignature, deviceId>
+ )
+ ]
+-->
+ [ ];]:
+   [
+   state_112111111111111111111( ~advk, ~content, ~devId, ~packagename,
+                                ~requestID, ~skAT, ~vsid, intermediateCertificate, rootCertificate,
+                                subjectCertificate
+   ),
+   VerficationCertificatehain( 'verification',
+                               <~vsid, true, true, true, atId, hardwareMeasurement, cdate, 
+                                fpackagename, fappSignature, deviceId>
+   )
+   ]
+  -->
+   [
+   state_1121111111111111111111( ~advk, ~content, ~devId,
+                                 ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                 fappSignature, fpackagename, hardwareMeasurement,
+                                 intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111_1:
+  "∀ x #NOW x.1 x.2 x.3.
+    (restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111_1( x,
+                                                                                                        x.1,
+                                                                                                        x.2,
+                                                                                                        x.3
+     ) @ #NOW) ⇒
+    ((¬(x = x.1)) ∨ (¬(x.2 = x.3)))"
+  // safety formula
+
+rule (modulo E) ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111[color=#805a40 process=if (¬(sign(~advk, <~packagename, ~content>) = fappSignature)) ∨
+(¬(~packagename = fpackagename))]:
+   [
+   state_1121111111111111111111( ~advk, ~content, ~devId,
+                                 ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                 fappSignature, fpackagename, hardwareMeasurement,
+                                 intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[
+  restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_0_1121111111111111111111_1( sign(~advk,
+                                                                                                          <
+                                                                                                           ~packagename, 
+                                                                                                           ~content
+                                                                                                          >),
+                                                                                                     fappSignature,
+                                                                                                     ~packagename,
+                                                                                                     fpackagename
+  )
+  ]->
+   [
+   state_11211111111111111111111( ~advk, ~content, ~devId,
+                                  ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                  fappSignature, fpackagename, hardwareMeasurement,
+                                  intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_1_1121111111111111111111_1:
+  "∀ x #NOW x.1 x.2 x.3.
+    (restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_1_1121111111111111111111_1( x,
+                                                                                                        x.1,
+                                                                                                        x.2,
+                                                                                                        x.3
+     ) @ #NOW) ⇒
+    (¬((¬(x = x.1)) ∨ (¬(x.2 = x.3))))"
+  // safety formula
+
+rule (modulo E) ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_1_1121111111111111111111[color=#805a40 process=if (¬(sign(~advk, <~packagename, ~content>) = fappSignature)) ∨
+(¬(~packagename = fpackagename))]:
+   [
+   state_1121111111111111111111( ~advk, ~content, ~devId,
+                                 ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                 fappSignature, fpackagename, hardwareMeasurement,
+                                 intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[
+  restr_ifsignadvkpackagenamecontentfappSignaturepackagenamefpackagename_1_1121111111111111111111_1( sign(~advk,
+                                                                                                          <
+                                                                                                           ~packagename, 
+                                                                                                           ~content
+                                                                                                          >),
+                                                                                                     fappSignature,
+                                                                                                     ~packagename,
+                                                                                                     fpackagename
+  )
+  ]->
+   [
+   state_11211111111111111111112( ~advk, ~content, ~devId,
+                                  ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                  fappSignature, fpackagename, hardwareMeasurement,
+                                  intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventVerdictappatIddeviceIdhardwareMeasurementinvalid_0_11211111111111111111111[color=#805a40 process=event Verdict_app( atId, deviceId, hardwareMeasurement, 'invalid' );]:
+   [
+   state_11211111111111111111111( ~advk, ~content, ~devId,
+                                  ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                  fappSignature, fpackagename, hardwareMeasurement,
+                                  intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[ Verdict_app( atId, deviceId, hardwareMeasurement, 'invalid' )
+  ]->
+   [
+   state_112111111111111111111111( ~advk, ~content, ~devId,
+                                   ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                   fappSignature, fpackagename, hardwareMeasurement,
+                                   intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventDfinish_0_112111111111111111111111[color=#805a40 process=event D_finish( );]:
+   [
+   state_112111111111111111111111( ~advk, ~content, ~devId,
+                                   ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                   fappSignature, fpackagename, hardwareMeasurement,
+                                   intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[ D_finish( ) ]->
+   [
+   state_1121111111111111111111111( ~advk, ~content, ~devId,
+                                    ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                    fappSignature, fpackagename, hardwareMeasurement,
+                                    intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1121111111111111111111111[color=#805a40 process=0]:
+   [
+   state_1121111111111111111111111( ~advk, ~content, ~devId,
+                                    ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                    fappSignature, fpackagename, hardwareMeasurement,
+                                    intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventAcceptCertrequestIDsubjectCertificateintermediateCertificaterootCertificate_0_11211111111111111111112[color=#805a40 process=event AcceptCert( ~requestID,
+            <subjectCertificate, intermediateCertificate, rootCertificate>
+);]:
+   [
+   state_11211111111111111111112( ~advk, ~content, ~devId,
+                                  ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                  fappSignature, fpackagename, hardwareMeasurement,
+                                  intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[
+  AcceptCert( ~requestID,
+              <subjectCertificate, intermediateCertificate, rootCertificate>
+  )
+  ]->
+   [
+   state_112111111111111111111121( ~advk, ~content, ~devId,
+                                   ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                   fappSignature, fpackagename, hardwareMeasurement,
+                                   intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventVerdictappatIddeviceIdhardwareMeasurementvalid_0_112111111111111111111121[color=#805a40 process=event Verdict_app( atId, deviceId, hardwareMeasurement, 'valid' );]:
+   [
+   state_112111111111111111111121( ~advk, ~content, ~devId,
+                                   ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                   fappSignature, fpackagename, hardwareMeasurement,
+                                   intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[ Verdict_app( atId, deviceId, hardwareMeasurement, 'valid' ) ]->
+   [
+   state_1121111111111111111111211( ~advk, ~content, ~devId,
+                                    ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                    fappSignature, fpackagename, hardwareMeasurement,
+                                    intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventDfinish_0_1121111111111111111111211[color=#805a40 process=event D_finish( );]:
+   [
+   state_1121111111111111111111211( ~advk, ~content, ~devId,
+                                    ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                    fappSignature, fpackagename, hardwareMeasurement,
+                                    intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  --[ D_finish( ) ]->
+   [
+   state_11211111111111111111112111( ~advk, ~content, ~devId,
+                                     ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                     fappSignature, fpackagename, hardwareMeasurement,
+                                     intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11211111111111111111112111[color=#805a40 process=0]:
+   [
+   state_11211111111111111111112111( ~advk, ~content, ~devId,
+                                     ~packagename, ~requestID, ~skAT, ~vsid, atId, cdate, deviceId,
+                                     fappSignature, fpackagename, hardwareMeasurement,
+                                     intermediateCertificate, rootCertificate, subjectCertificate
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newrootSk_0_112112[color=#6d8040 process=new ~rootSk;]:
+   [ state_112112( ~skAT ), Fr( ~rootSk ) ]
+  -->
+   [ state_1121121( ~rootSk, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RequestCreatingIntermediateCertificaterootSkcreatecertificateTbsInfopkrootSkrootSkGetRootCertificatecreatecertificateTbsInfopkrootSkrootSk_0_1121121[color=#6d8040 process= [ ]
+-->
+ [
+ !RequestCreatingIntermediateCertificate( ~rootSk,
+                                          create_certificate('TbsInfo', pk(~rootSk), ~rootSk)
+ ),
+ !GetRootCertificate( create_certificate('TbsInfo', pk(~rootSk),
+                                         ~rootSk)
+ )
+ ];]:
+   [ state_1121121( ~rootSk, ~skAT ) ]
+  -->
+   [
+   state_11211211( ~rootSk, ~skAT ),
+   !RequestCreatingIntermediateCertificate( ~rootSk,
+                                            create_certificate('TbsInfo', pk(~rootSk), ~rootSk)
+   ),
+   !GetRootCertificate( create_certificate('TbsInfo', pk(~rootSk),
+                                           ~rootSk)
+   )
+   ]
+
+  /*
+  rule (modulo AC) RequestCreatingIntermediateCertificaterootSkcreatecertificateTbsInfopkrootSkrootSkGetRootCertificatecreatecertificateTbsInfopkrootSkrootSk_0_1121121[color=#6d8040 process= [ ]
+-->
+ [
+ !RequestCreatingIntermediateCertificate( ~rootSk,
+                                          create_certificate('TbsInfo', pk(~rootSk), ~rootSk)
+ ),
+ !GetRootCertificate( create_certificate('TbsInfo', pk(~rootSk),
+                                         ~rootSk)
+ )
+ ];]:
+     [ state_1121121( ~rootSk, ~skAT ) ]
+    -->
+     [
+     state_11211211( ~rootSk, ~skAT ),
+     !RequestCreatingIntermediateCertificate( ~rootSk,
+                                              <'TbsInfo', pk(~rootSk), 
+                                               sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)>
+     ),
+     !GetRootCertificate( <'TbsInfo', pk(~rootSk), 
+                           sign(<'TbsInfo', pk(~rootSk)>, ~rootSk)>
+     )
+     ]
+  */
+
+rule (modulo E) __0_11211211[color=#6d8040 process=!]:
+   [ state_11211211( ~rootSk, ~skAT ) ]
+  -->
+   [ !semistate_112112111( ~rootSk, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_11211211[color=#6d8040 process=!]:
+   [ !semistate_112112111( ~rootSk, ~skAT ) ]
+  -->
+   [ state_112112111( ~rootSk, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventTfinish_0_112112111[color=#6d8040 process=event T_finish( );]:
+   [ state_112112111( ~rootSk, ~skAT ) ]
+  --[ T_finish( ) ]->
+   [ state_1121121111( ~rootSk, ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1121121111[color=#6d8040 process=0]:
+   [ state_1121121111( ~rootSk, ~skAT ) ] --> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11212[color=#ffffff process=!]:
+   [ state_11212( ~skAT ) ] --> [ !semistate_112121( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_11212[color=#ffffff process=!]:
+   [ !semistate_112121( ~skAT ) ] --> [ state_112121( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_112121[color=#ffffff process=|]:
+   [ state_112121( ~skAT ) ]
+  -->
+   [ state_1121211( ~skAT ), state_1121212( ~skAT ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newswId_0_1121211[color=#538040 process=new ~swId;]:
+   [ state_1121211( ~skAT ), Fr( ~swId ) ]
+  -->
+   [ state_11212111( ~skAT, ~swId ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SetUPSWdeviceIdstatusFinishSetUPSWdeviceIdswId_0_11212111[color=#538040 process= [ SetUPSW( deviceId, status ) ]
+-->
+ [ FinishSetUPSW( deviceId, ~swId ) ];]:
+   [ state_11212111( ~skAT, ~swId ), SetUPSW( deviceId, status ) ]
+  -->
+   [
+   state_112121111( ~skAT, ~swId, deviceId, status ),
+   FinishSetUPSW( deviceId, ~swId )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) incustomSoftwareMeasurement_0_112121111[color=#538040 process=in(customSoftwareMeasurement);]:
+   [
+   state_112121111( ~skAT, ~swId, deviceId, status ),
+   In( customSoftwareMeasurement )
+   ]
+  -->
+   [
+   state_1121211111( ~skAT, ~swId, customSoftwareMeasurement,
+                     deviceId, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RequestCreatingIntermediateCertificaterootSkrootCertificate_0_1121211111[color=#538040 process= [
+ !RequestCreatingIntermediateCertificate( rootSk, rootCertificate )
+ ]
+-->
+ [ ];]:
+   [
+   state_1121211111( ~skAT, ~swId, customSoftwareMeasurement,
+                     deviceId, status
+   ),
+   !RequestCreatingIntermediateCertificate( rootSk, rootCertificate )
+   ]
+  -->
+   [
+   state_11212111111( ~skAT, ~swId, customSoftwareMeasurement,
+                      deviceId, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newkeymasterSk_0_11212111111[color=#538040 process=new ~keymasterSk;]:
+   [
+   state_11212111111( ~skAT, ~swId, customSoftwareMeasurement,
+                      deviceId, rootCertificate, rootSk, status
+   ),
+   Fr( ~keymasterSk )
+   ]
+  -->
+   [
+   state_112121111111( ~keymasterSk, ~skAT, ~swId,
+                       customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                       status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_112121111111[color=#538040 process=!]:
+   [
+   state_112121111111( ~keymasterSk, ~skAT, ~swId,
+                       customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                       status
+   )
+   ]
+  -->
+   [
+   !semistate_1121211111111( ~keymasterSk, ~skAT, ~swId,
+                             customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                             status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __1_112121111111[color=#538040 process=!]:
+   [
+   !semistate_1121211111111( ~keymasterSk, ~skAT, ~swId,
+                             customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                             status
+   )
+   ]
+  -->
+   [
+   state_1121211111111( ~keymasterSk, ~skAT, ~swId,
+                        customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                        status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TOSWdeviceIdswIdpackagenamecontentappSignature_0_1121211111111[color=#538040 process= [ TOSW( deviceId, ~swId, packagename, content, appSignature ) ]
+-->
+ [ ];]:
+   [
+   state_1121211111111( ~keymasterSk, ~skAT, ~swId,
+                        customSoftwareMeasurement, deviceId, rootCertificate, rootSk,
+                        status
+   ),
+   TOSW( deviceId, ~swId, packagename, content, appSignature )
+   ]
+  -->
+   [
+   state_11212111111111( ~keymasterSk, ~skAT, ~swId, appSignature,
+                         content, customSoftwareMeasurement, deviceId, packagename,
+                         rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newkey_0_11212111111111[color=#538040 process=new ~key;]:
+   [
+   state_11212111111111( ~keymasterSk, ~skAT, ~swId, appSignature,
+                         content, customSoftwareMeasurement, deviceId, packagename,
+                         rootCertificate, rootSk, status
+   ),
+   Fr( ~key )
+   ]
+  -->
+   [
+   state_112121111111111( ~key, ~keymasterSk, ~skAT, ~swId,
+                          appSignature, content, customSoftwareMeasurement, deviceId,
+                          packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) newatId_0_112121111111111[color=#538040 process=new ~atId;]:
+   [
+   state_112121111111111( ~key, ~keymasterSk, ~skAT, ~swId,
+                          appSignature, content, customSoftwareMeasurement, deviceId,
+                          packagename, rootCertificate, rootSk, status
+   ),
+   Fr( ~atId )
+   ]
+  -->
+   [
+   state_1121211111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                           appSignature, content, customSoftwareMeasurement, deviceId,
+                           packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventAttestatingAppatIdpackagenameappSignaturedeviceId_0_1121211111111111[color=#538040 process=event Attestating_App( ~atId, packagename, appSignature, deviceId );]:
+   [
+   state_1121211111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                           appSignature, content, customSoftwareMeasurement, deviceId,
+                           packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ Attestating_App( ~atId, packagename, appSignature, deviceId )
+  ]->
+   [
+   state_11212111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                            appSignature, content, customSoftwareMeasurement, deviceId,
+                            packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) incdate_0_11212111111111111[color=#538040 process=in(cdate);]:
+   [
+   state_11212111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                            appSignature, content, customSoftwareMeasurement, deviceId,
+                            packagename, rootCertificate, rootSk, status
+   ),
+   In( cdate )
+   ]
+  -->
+   [
+   state_112121111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                             appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                             packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifstatustamper_0_112121111111111111_1:
+  "∀ x #NOW.
+    (restr_ifstatustamper_0_112121111111111111_1( x ) @ #NOW) ⇒
+    (x = 'tamper')"
+  // safety formula
+
+rule (modulo E) ifstatustamper_0_112121111111111111[color=#538040 process=if status = 'tamper']:
+   [
+   state_112121111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                             appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                             packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ restr_ifstatustamper_0_112121111111111111_1( status ) ]->
+   [
+   state_1121211111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                              appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                              packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifstatustamper_1_112121111111111111_1:
+  "∀ x #NOW.
+    (restr_ifstatustamper_1_112121111111111111_1( x ) @ #NOW) ⇒
+    (¬(x = 'tamper'))"
+  // safety formula
+
+rule (modulo E) ifstatustamper_1_112121111111111111[color=#538040 process=if status = 'tamper']:
+   [
+   state_112121111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                             appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                             packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ restr_ifstatustamper_1_112121111111111111_1( status ) ]->
+   [
+   state_1121211111111111112( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                              appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                              packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventDeviceStatusatIddeviceIdinvalid_0_1121211111111111111[color=#538040 process=event DeviceStatus( ~atId, deviceId, 'invalid' );]:
+   [
+   state_1121211111111111111( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                              appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                              packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ DeviceStatus( ~atId, deviceId, 'invalid' ) ]->
+   [
+   state_11212111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                               ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                               deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventCreateCertcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_11212111111111111111[color=#538040 process=event CreateCert( <
+             create_certificate(<~atId, 'invalid', cdate, packagename, 
+                                 appSignature, deviceId>,
+                                pk(~key), ~keymasterSk), 
+             create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+             rootCertificate>
+);]:
+   [
+   state_11212111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                               ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                               deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[
+  CreateCert( <
+               create_certificate(<~atId, 'invalid', cdate, packagename, 
+                                   appSignature, deviceId>,
+                                  pk(~key), ~keymasterSk), 
+               create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+               rootCertificate>
+  )
+  ]->
+   [
+   state_112121111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /*
+  rule (modulo AC) eventCreateCertcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_11212111111111111111[color=#538040 process=event CreateCert( <
+             create_certificate(<~atId, 'invalid', cdate, packagename, 
+                                 appSignature, deviceId>,
+                                pk(~key), ~keymasterSk), 
+             create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+             rootCertificate>
+);]:
+     [
+     state_11212111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+    --[
+    CreateCert( <
+                 <<~atId, 'invalid', cdate, packagename, appSignature, deviceId>, 
+                  pk(~key), 
+                  sign(<
+                        <~atId, 'invalid', cdate, packagename, appSignature, deviceId>, 
+                        pk(~key)>,
+                       ~keymasterSk)
+                 >, 
+                 <'TbsKeyStoreInfo', pk(~keymasterSk), 
+                  sign(<'TbsKeyStoreInfo', pk(~keymasterSk)>, rootSk)>, 
+                 rootCertificate>
+    )
+    ]->
+     [
+     state_112121111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+  */
+
+rule (modulo E) outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111[color=#538040 process=out(<
+ create_certificate(<~atId, 'invalid', cdate, packagename, 
+                     appSignature, deviceId>,
+                    pk(~key), ~keymasterSk), 
+ create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+ rootCertificate>);]:
+   [
+   state_112121111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  -->
+   [
+   state_1121211111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+   ),
+   Out( <
+         create_certificate(<~atId, 'invalid', cdate, packagename, 
+                             appSignature, deviceId>,
+                            pk(~key), ~keymasterSk), 
+         create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+         rootCertificate>
+   )
+   ]
+
+  /*
+  rule (modulo AC) outcreatecertificateatIdinvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111111[color=#538040 process=out(<
+ create_certificate(<~atId, 'invalid', cdate, packagename, 
+                     appSignature, deviceId>,
+                    pk(~key), ~keymasterSk), 
+ create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+ rootCertificate>);]:
+     [
+     state_112121111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+    -->
+     [
+     state_1121211111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                   ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                   deviceId, packagename, rootCertificate, rootSk, status
+     ),
+     Out( <
+           <<~atId, 'invalid', cdate, packagename, appSignature, deviceId>, 
+            pk(~key), 
+            sign(<
+                  <~atId, 'invalid', cdate, packagename, appSignature, deviceId>, 
+                  pk(~key)>,
+                 ~keymasterSk)
+           >, 
+           <'TbsKeyStoreInfo', pk(~keymasterSk), 
+            sign(<'TbsKeyStoreInfo', pk(~keymasterSk)>, rootSk)>, 
+           rootCertificate>
+     )
+     ]
+  */
+
+rule (modulo E) eventSfinish_0_1121211111111111111111[color=#538040 process=event S_finish( );]:
+   [
+   state_1121211111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ S_finish( ) ]->
+   [
+   state_11212111111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11212111111111111111111[color=#538040 process=0]:
+   [
+   state_11212111111111111111111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventDeviceStatusatIddeviceIdvalid_0_1121211111111111112[color=#538040 process=event DeviceStatus( ~atId, deviceId, 'valid' );]:
+   [
+   state_1121211111111111112( ~atId, ~key, ~keymasterSk, ~skAT, ~swId,
+                              appSignature, cdate, content, customSoftwareMeasurement, deviceId,
+                              packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ DeviceStatus( ~atId, deviceId, 'valid' ) ]->
+   [
+   state_11212111111111111121( ~atId, ~key, ~keymasterSk, ~skAT,
+                               ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                               deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) eventCreateCertcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_11212111111111111121[color=#538040 process=event CreateCert( <
+             create_certificate(<~atId, 'valid', cdate, packagename, 
+                                 appSignature, deviceId>,
+                                pk(~key), ~keymasterSk), 
+             create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+             rootCertificate>
+);]:
+   [
+   state_11212111111111111121( ~atId, ~key, ~keymasterSk, ~skAT,
+                               ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                               deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[
+  CreateCert( <
+               create_certificate(<~atId, 'valid', cdate, packagename, 
+                                   appSignature, deviceId>,
+                                  pk(~key), ~keymasterSk), 
+               create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+               rootCertificate>
+  )
+  ]->
+   [
+   state_112121111111111111211( ~atId, ~key, ~keymasterSk, ~skAT,
+                                ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /*
+  rule (modulo AC) eventCreateCertcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_11212111111111111121[color=#538040 process=event CreateCert( <
+             create_certificate(<~atId, 'valid', cdate, packagename, 
+                                 appSignature, deviceId>,
+                                pk(~key), ~keymasterSk), 
+             create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+             rootCertificate>
+);]:
+     [
+     state_11212111111111111121( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+    --[
+    CreateCert( <
+                 <<~atId, 'valid', cdate, packagename, appSignature, deviceId>, 
+                  pk(~key), 
+                  sign(<
+                        <~atId, 'valid', cdate, packagename, appSignature, deviceId>, 
+                        pk(~key)>,
+                       ~keymasterSk)
+                 >, 
+                 <'TbsKeyStoreInfo', pk(~keymasterSk), 
+                  sign(<'TbsKeyStoreInfo', pk(~keymasterSk)>, rootSk)>, 
+                 rootCertificate>
+    )
+    ]->
+     [
+     state_112121111111111111211( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+  */
+
+rule (modulo E) outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211[color=#538040 process=out(<
+ create_certificate(<~atId, 'valid', cdate, packagename, 
+                     appSignature, deviceId>,
+                    pk(~key), ~keymasterSk), 
+ create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+ rootCertificate>);]:
+   [
+   state_112121111111111111211( ~atId, ~key, ~keymasterSk, ~skAT,
+                                ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  -->
+   [
+   state_1121211111111111112111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+   ),
+   Out( <
+         create_certificate(<~atId, 'valid', cdate, packagename, 
+                             appSignature, deviceId>,
+                            pk(~key), ~keymasterSk), 
+         create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+         rootCertificate>
+   )
+   ]
+
+  /*
+  rule (modulo AC) outcreatecertificateatIdvalidcdatepackagenameappSignaturedeviceIdpkkeykeymasterSkcreatecertificateTbsKeyStoreInfopkkeymasterSkrootSkrootCertificate_0_112121111111111111211[color=#538040 process=out(<
+ create_certificate(<~atId, 'valid', cdate, packagename, 
+                     appSignature, deviceId>,
+                    pk(~key), ~keymasterSk), 
+ create_certificate('TbsKeyStoreInfo', pk(~keymasterSk), rootSk), 
+ rootCertificate>);]:
+     [
+     state_112121111111111111211( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+     )
+     ]
+    -->
+     [
+     state_1121211111111111112111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                   ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                   deviceId, packagename, rootCertificate, rootSk, status
+     ),
+     Out( <
+           <<~atId, 'valid', cdate, packagename, appSignature, deviceId>, 
+            pk(~key), 
+            sign(<
+                  <~atId, 'valid', cdate, packagename, appSignature, deviceId>, 
+                  pk(~key)>,
+                 ~keymasterSk)
+           >, 
+           <'TbsKeyStoreInfo', pk(~keymasterSk), 
+            sign(<'TbsKeyStoreInfo', pk(~keymasterSk)>, rootSk)>, 
+           rootCertificate>
+     )
+     ]
+  */
+
+rule (modulo E) eventSfinish_0_1121211111111111112111[color=#538040 process=event S_finish( );]:
+   [
+   state_1121211111111111112111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                 ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                 deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  --[ S_finish( ) ]->
+   [
+   state_11212111111111111121111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_11212111111111111121111[color=#538040 process=0]:
+   [
+   state_11212111111111111121111( ~atId, ~key, ~keymasterSk, ~skAT,
+                                  ~swId, appSignature, cdate, content, customSoftwareMeasurement,
+                                  deviceId, packagename, rootCertificate, rootSk, status
+   )
+   ]
+  -->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SetUPSWdeviceIdstatus_0_1121212[color=#7c4080 process= [ SetUPSW( deviceId, status ) ] --> [ ];]:
+   [ state_1121212( ~skAT ), SetUPSW( deviceId, status ) ]
+  -->
+   [ state_11212121( ~skAT, deviceId, status ) ]
+
+  // loop breaker: [1]
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifstatustamper_0_11212121_1:
+  "∀ x #NOW.
+    (restr_ifstatustamper_0_11212121_1( x ) @ #NOW) ⇒
+    (¬(x = 'tamper'))"
+  // safety formula
+
+rule (modulo E) ifstatustamper_0_11212121[color=#7c4080 process=if ¬(status = 'tamper')]:
+   [ state_11212121( ~skAT, deviceId, status ) ]
+  --[ restr_ifstatustamper_0_11212121_1( status ) ]->
+   [ state_112121211( ~skAT, deviceId, status ) ]
+
+  /* has exactly the trivial AC variant */
+
+restriction restr_ifstatustamper_1_11212121_1:
+  "∀ x #NOW.
+    (restr_ifstatustamper_1_11212121_1( x ) @ #NOW) ⇒
+    (¬(¬(x = 'tamper')))"
+  // safety formula
+
+rule (modulo E) ifstatustamper_1_11212121[color=#7c4080 process=if ¬(status = 'tamper')]:
+   [ state_11212121( ~skAT, deviceId, status ) ]
+  --[ restr_ifstatustamper_1_11212121_1( status ) ]->
+   [ state_112121212( ~skAT, deviceId, status ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SetUPSWdeviceIdtamper_0_112121211[color=#7c4080 process= [ ] --> [ SetUPSW( deviceId, 'tamper' ) ];]:
+   [ state_112121211( ~skAT, deviceId, status ) ]
+  -->
+   [
+   state_1121212111( ~skAT, deviceId, status ),
+   SetUPSW( deviceId, 'tamper' )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_1121212111[color=#7c4080 process=0]:
+   [ state_1121212111( ~skAT, deviceId, status ) ] --> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) __0_112121212[color=#7c4080 process=0]:
+   [ state_112121212( ~skAT, deviceId, status ) ] --> [ ]
+
+  /* has exactly the trivial AC variant */
+
+restriction single_session:
+  "∀ #i #j. ((Init( ) @ #i) ∧ (Init( ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+/* All well-formedness checks were successful. */
+
+end
