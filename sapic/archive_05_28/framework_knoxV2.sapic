@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_SafetyNetHW
+theory Framework_KnoxV2
 begin
 
 builtins: signing, asymmetric-encryption
@@ -92,14 +92,14 @@ let Device =
 
 /***************************************** Knox V3 *****************************************/
 
-let AtServerSN =
+let AtServerKV2 =
 	!(
 
 		//retrive the blob from the developer server and verfiy it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+        [TOAT(sid,rep(<atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in		
+		let verdict = <atId,hardwareMeasurement,nonce, deviceId> in
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
@@ -111,7 +111,7 @@ let UnlockBootloader =
 		[]--[]->[SetUPSW(deviceId,'tamper')];
 		0
 
-let SafetyNetTA =
+let KnoxV2TA =
 
 	new ~swId;
 
@@ -126,13 +126,14 @@ let SafetyNetTA =
 		//attestation_agent send app data to secure world, start an attestation
 		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
 
+		
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			let softwareMeasurement =  customSoftwareMeasurement in
+			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(blob);
@@ -142,7 +143,7 @@ let SafetyNetTA =
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(blob);
@@ -152,7 +153,7 @@ let SafetyNetTA =
 	)
 
 
-let DevServerSN =
+let DevServerKV2 =
 
 	//creating and publising the application
 	new ~advk;
@@ -173,7 +174,7 @@ let DevServerSN =
 		[]--[]-> [Nonce_Sent(~devId,~nonce)];
 		out(~nonce);
 		
-		//retrieve blob from clients
+		//retrive blob from clients
 		in(blob);
 		
 		//create developer-attesation server session id, to keep track or pair of request-response message  
@@ -181,16 +182,12 @@ let DevServerSN =
 		//send blob to the attestation server
 		[]--[]-> [TOAT(~sid,blob)];
 		
-		//retrieve the verfied report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
+		//retreive the verfied report the attestation server, pattern matching is used for checking the status
+		[FRAT(~sid,<atId,hardwareMeasurement,~nonce, deviceId>)]--[]-> [];
 		
-		//attestation finished		
-		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
-			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
-			event D_finish() 
-		else
-			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
-			event D_finish() 
+		//attestation finished	//becasue measurement miss app info. so we assume always invalid	
+		event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid'); 
+		0
 
 
 	)
@@ -209,13 +206,13 @@ let DevServerSN =
 
 
 let AttestationAgent =
-	SafetyNetTA
+	KnoxV2TA
 
 let AtServer = 
-	AtServerSN
+	AtServerKV2
 
 let DevServer = 
-	DevServerSN
+	DevServerKV2
 
 
 
@@ -226,7 +223,7 @@ new ~skAT;
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
-	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i ==> 
+	"(All atId deviceId a #i. Verdict_app(atId,deviceId,'valid',a) @ i ==> 
 	( 
 	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
 	& (Ex packagename appSignature #j #k. 
@@ -251,9 +248,6 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
-lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-	
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace

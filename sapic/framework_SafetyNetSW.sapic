@@ -251,6 +251,9 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
+lemma UniqueNonce:
+	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
+	
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace

@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_SafetyNetHW
+theory Framework_KnoxV3
 begin
 
 builtins: signing, asymmetric-encryption
@@ -92,14 +92,22 @@ let Device =
 
 /***************************************** Knox V3 *****************************************/
 
-let AtServerSN =
+let AtServerKV3 =
 	!(
 
-		//retrive the blob from the developer server and verfiy it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+		//Retrive blob
+		[HttpsToAt(tsid,rep(<atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+
+		//refernce blob to an hid
+		new ~hid;
+		//Send hid for the TZ
+		[]--[]-> [HttpsFromAT(tsid,~hid)];
+
+		//Retrive hid from the developer server and verfiy it
+        [TOAT(sid,~hid)]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in		
+		let verdict = <atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId> in
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
@@ -111,7 +119,7 @@ let UnlockBootloader =
 		[]--[]->[SetUPSW(deviceId,'tamper')];
 		0
 
-let SafetyNetTA =
+let KnoxV3TA =
 
 	new ~swId;
 
@@ -126,16 +134,20 @@ let SafetyNetTA =
 		//attestation_agent send app data to secure world, start an attestation
 		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
 
+		
+		new ~tsid; //  attestation server hid session id
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
+			let softwareMeasurement = customSoftwareMeasurement in
 			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
+			[]--[]-> [HttpsToAt(~tsid,blob)];
+			[HttpsFromAT(~tsid,hid)]--[]-> [];
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
+			out(hid);
 			out(packagename,appSignature);
 			event S_finish();
 			0
@@ -144,15 +156,17 @@ let SafetyNetTA =
 			let softwareMeasurement = 'valid' in
 			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
+			[]--[]-> [HttpsToAt(~tsid,blob)];
+			[HttpsFromAT(~tsid,hid)]--[]-> [];
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
+			out(hid);
 			event S_finish();
 			0
 			
 	)
 
 
-let DevServerSN =
+let DevServerKV3 =
 
 	//creating and publising the application
 	new ~advk;
@@ -173,13 +187,13 @@ let DevServerSN =
 		[]--[]-> [Nonce_Sent(~devId,~nonce)];
 		out(~nonce);
 		
-		//retrieve blob from clients
-		in(blob);
+		//retrive hid from clients
+		in(hid);
 		
 		//create developer-attesation server session id, to keep track or pair of request-response message  
 		new ~sid;
 		//send blob to the attestation server
-		[]--[]-> [TOAT(~sid,blob)];
+		[]--[]-> [TOAT(~sid,hid)];
 		
 		//retrieve the verfied report the attestation server, pattern matching is used for checking the status
 		[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
@@ -209,13 +223,13 @@ let DevServerSN =
 
 
 let AttestationAgent =
-	SafetyNetTA
+	KnoxV3TA
 
 let AtServer = 
-	AtServerSN
+	AtServerKV3
 
 let DevServer = 
-	DevServerSN
+	DevServerKV3
 
 
 
@@ -251,9 +265,6 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
-lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-	
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace

@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_SafetyNetHW
+theory Framework_SafetyNetSW
 begin
 
 builtins: signing, asymmetric-encryption
@@ -96,10 +96,10 @@ let AtServerSN =
 	!(
 
 		//retrive the blob from the developer server and verfiy it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+        [TOAT(sid,rep(<atId,measurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in		
+		let verdict = <atId,measurement,packagename,appSignature,nonce, deviceId> in		
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
@@ -111,7 +111,7 @@ let UnlockBootloader =
 		[]--[]->[SetUPSW(deviceId,'tamper')];
 		0
 
-let SafetyNetTA =
+let GooglePlay =
 
 	new ~swId;
 
@@ -131,8 +131,8 @@ let SafetyNetTA =
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			let softwareMeasurement = customSoftwareMeasurement in
+			let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(blob);
@@ -142,7 +142,7 @@ let SafetyNetTA =
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
 			///send attestation report to the attestation server
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			out(blob);
@@ -182,14 +182,14 @@ let DevServerSN =
 		[]--[]-> [TOAT(~sid,blob)];
 		
 		//retrieve the verfied report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
+		[FRAT(~sid,<atId,measurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
 		
 		//attestation finished		
 		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
-			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
+			event Verdict_app(atId,deviceId,measurement,'invalid');
 			event D_finish() 
 		else
-			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
+			event Verdict_app(atId,deviceId,measurement,'valid');
 			event D_finish() 
 
 
@@ -209,7 +209,7 @@ let DevServerSN =
 
 
 let AttestationAgent =
-	SafetyNetTA
+	GooglePlay
 
 let AtServer = 
 	AtServerSN
@@ -251,9 +251,6 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
-lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-	
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace

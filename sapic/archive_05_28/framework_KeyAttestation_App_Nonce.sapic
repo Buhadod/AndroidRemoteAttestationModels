@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_SafetyNetHW
+theory Framework_KeyAttestation_App_Nonce
 begin
 
 builtins: signing, asymmetric-encryption
@@ -32,6 +32,15 @@ equations:
 
 /***************************************** Generic *****************************************/
 
+let KeyApp = 
+    [Nonce_Sent(devId,nonce)]--[]-> [];
+
+	event NonceRecieved(nonce);
+
+	//attestation_agent send app data to secure world to start an attestation
+	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+
+	0
 
 let HonestAppInstalltion =
 	event Checked('HonestAppInstalltion');
@@ -40,14 +49,16 @@ let HonestAppInstalltion =
 
 	event Application_Installed(~deviceId,packagename,content,appSignature);
 
-	//receive a nonce
-	[Nonce_Sent(devId,nonce)]--[]-> [];
+	!KeyApp
+
+let ArbitraryApp =
+    //receive a nonce
+	in(nonce);
 
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
 	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
-
 	0
 
 
@@ -60,15 +71,8 @@ let ArbitraryAppInstalltion =
 
 	event Application_Installed(~deviceId,packagename,content,appSignature);
 
-	//receive a nonce
-	in(nonce);
-
-	event NonceRecieved(nonce);
-
-	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
-
-	0
+    !ArbitraryApp
+	
 
 let AppInstallation =
 	(HonestAppInstalltion + ArbitraryAppInstalltion)
@@ -92,16 +96,18 @@ let Device =
 
 /***************************************** Knox V3 *****************************************/
 
-let AtServerSN =
+let AtServerKA =
+	new ~rootSk;
+	let rootCertificate = create_certificate('TbsInfo',pk(~rootSk),~rootSk) in
+
+	//share root certficate	
+	[]--[]->
+	[
+		!RequestCreatingIntermediateCertificate(~rootSk,rootCertificate),
+		!GetRootCertificate(rootCertificate)
+	];
+
 	!(
-
-		//retrive the blob from the developer server and verfiy it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
-
-		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,packagename,appSignature,nonce, deviceId> in		
-        []--[]-> [FRAT(sid,verdict)];
-
 		event T_finish() 
 	)
 
@@ -111,7 +117,7 @@ let UnlockBootloader =
 		[]--[]->[SetUPSW(deviceId,'tamper')];
 		0
 
-let SafetyNetTA =
+let KeyMasterTA =
 
 	new ~swId;
 
@@ -121,38 +127,53 @@ let SafetyNetTA =
 	//retrieve an adversary's attempt to compomised the device
 	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
 	in(customSoftwareMeasurement);
+	
+	//Request attestation server
+	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
+	
+	//Create keymaster certficate
+	new ~keymasterSk;
+	let  intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keymasterSk),rootSk) in
+
+	//retrieve an adversary's attempt to compomised the device
+	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
 		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
 
-		new ~atId; // attestation id
+		new ~key;
+
+		new ~atId;
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
 		if(status = 'tamper') then
 			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
+			let softwareMeasurement = customSoftwareMeasurement in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
-			out(packagename,appSignature);
+            event CreateCert(certificateChain);
+			out(certificateChain);
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
 			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
+            event CreateCert(certificateChain);
+			out(certificateChain);
 			event S_finish();
 			0
 			
 	)
 
 
-let DevServerSN =
+let DevServerKA =
 
 	//creating and publising the application
 	new ~advk;
@@ -170,25 +191,32 @@ let DevServerSN =
 		// create a nonce
 		new ~nonce;
 		event NonceGenerated(~nonce);
+        new ~requestID;
+        event RequestCert(~requestID);
 		[]--[]-> [Nonce_Sent(~devId,~nonce)];
 		out(~nonce);
 		
 		//retrieve blob from clients
-		in(blob);
+		in(<subjectCertificate, intermediateCertificate, rootCertificate>);
 		
-		//create developer-attesation server session id, to keep track or pair of request-response message  
-		new ~sid;
-		//send blob to the attestation server
-		[]--[]-> [TOAT(~sid,blob)];
-		
-		//retrieve the verfied report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
-		
+		[!GetRootCertificate(rootCertificate)]--[]->[];
+
+		let verification1 = verify_certificate(subjectCertificate, intermediateCertificate) in
+		let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
+		let verification3 = verify_certificate(rootCertificate, rootCertificate) in
+		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
+
+		//local verfication for key attestation chain
+		new ~vsid;
+		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
+		[VerficationCertificatehain('verification',<~vsid,true,true,true,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId>>)]--[]->[];
+	
 		//attestation finished		
 		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
 			event D_finish() 
 		else
+            event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
 			event D_finish() 
 
@@ -209,13 +237,14 @@ let DevServerSN =
 
 
 let AttestationAgent =
-	SafetyNetTA
+	KeyMasterTA
 
 let AtServer = 
-	AtServerSN
+	AtServerKA
 
 let DevServer = 
-	DevServerSN
+	DevServerKA
+
 
 
 
@@ -223,6 +252,25 @@ let DevServer =
 new ~skAT;
 
 (!Device || !DevServer || AtServer || !AttestationAgent || UnlockBootloader)
+
+
+lemma CertPossible:
+  exists-trace 
+    "Ex requestID subjectCertificate intermediateCertificate rootCertificate #i #j.
+        (AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
+        & RequestCert(requestID)@j) & #j < #i "
+
+
+lemma CertFresh:
+    "All requestID subjectCertificate intermediateCertificate rootCertificate #i.
+        AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
+            ==>   Ex #j. RequestCert(requestID)@j
+			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
+			    & #j < #k & #k < #i" 
+
+
+
+
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
@@ -251,9 +299,6 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
-lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-	
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace
