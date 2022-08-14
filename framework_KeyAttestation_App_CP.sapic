@@ -10,7 +10,7 @@ begin
 
 builtins: signing, asymmetric-encryption
 
-functions: check_rep/2,  get_rep/1, rep/2 [private], create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+functions: check_rep/2,  get_rep/1, rep/2 [private], create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1, get_public_key_certificate/1
 
 equations:
     check_rep(rep(x.1, x.2), x.2) = true,
@@ -26,7 +26,11 @@ equations:
 
     get_tbsInfo_certificate( 
         < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-          ) = SubjectTBSCertificateInfo
+          ) = SubjectTBSCertificateInfo,
+
+	get_public_key_certificate( 
+	< SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
+		) = pk(SubjectSk)
       
 
 
@@ -40,9 +44,9 @@ let KeyApp =
 	//attestation_agent send app data to secure world to start an attestation
 	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
 
-	[SecretSent(devId,secret)]--[]-> [];
-	in(secret);
-	event Secret_Received(devId,secret)
+	[SecretSent(devId,cipher)]--[]-> [];
+	in(cipher);
+	event Secret_Received(devId,cipher);
 
 	0
 
@@ -210,6 +214,7 @@ let DevServerKA =
 		let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
 		let verification3 = verify_certificate(rootCertificate, rootCertificate) in
 		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
+		let subjectpk = get_public_key_certificate(subjectCertificate) in
 
 		event D_finish('here');
 		//local verfication for key attestation chain
@@ -217,16 +222,18 @@ let DevServerKA =
 		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
 		[VerficationCertificatehain('verification',<~vsid,true,true,true,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId>>)]--[]->[];
 	
+		let cipher = ~secret in 
+		//let cipher = aenc(~secret,subjectpk) in
 		//attestation finished		
 		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
-			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
-			[]--[]-> [SecretSent(~devId,~secret)];
-			event Secret_Sent(~devId,~secret);
-			out(~secret);
+			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');	
 			event D_finish('invalid') 
 		else
             event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
+			[]--[]-> [SecretSent(~devId,cipher)];
+			event Secret_Sent(~devId,cipher);
+			out(cipher);
 			event D_finish('valid') 
 
 
@@ -313,8 +320,8 @@ lemma UniqueNonce:
 
 	
 lemma SecretReceivedLemma:
-	"All secret devId #i. Secret_Received(secret,devId) @ i ==> 
-		(Ex #j. Secret_Sent(secret,devId) @j)
+	"All cipher devId #i. Secret_Received(devId,cipher) @ i ==> 
+		(Ex #j. Secret_Sent(devId,cipher) @j)
 	"
 
 //Sanity check: Attestation finished
