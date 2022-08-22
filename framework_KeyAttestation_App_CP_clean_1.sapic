@@ -5,7 +5,7 @@
 	
 *******************************************************************************/
 
-theory Framework_KeyAttestation_App_CP
+theory Framework_KeyAttestation_App_CP_Clean_1
 begin
 
 builtins: signing, asymmetric-encryption
@@ -36,27 +36,25 @@ equations:
 
 /***************************************** Generic *****************************************/
 
+let Np = 
+
+	in(cipher);
+	event CipherReceived(cipher);
+	0
+
+
 let KeyApp = 
     [Nonce_Sent(devId,nonce)]--[]-> [];
 
 	event NonceRecieved(nonce);
-
+	new ~iid;
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~appId,~iid,~deviceId,nonce,packagename,content,appSignature)];
 
-	in(cipher);
-	//send secret to secure world to start an attestation
-	[]--[]-> [TOSWS(~deviceId,swId,cipher)];
-	//get secret pack
-	[TOAPPS(~deviceId,swId,<secret,secretSignature,verify(secretSignature,secret,secretPk)>)]--[]-> [];
+	//[TOAPPS(~appId,~iid,<secret, secretSignature,verify(secretSignature,secret,secretPk)>)]--[]->[];
+
+	//event SecretReceivedVerfied(secret, verify(secretSignature,secret,secretPk));
 	0
-
-	// if(verify(secretSignature,secret,secretPk)= true) then
-	// 	event SecretReceived(secret,'valid');
-	// 	0
-	// else
-	// 	event SecretReceived(secret,'invalid');
-	// 	0
 
 let HonestAppInstalltion =
 	event Checked('HonestAppInstalltion');
@@ -72,9 +70,9 @@ let ArbitraryApp =
 	in(nonce);
 
 	event NonceRecieved(nonce);
-
+	new ~iid;
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~appId,~iid,~deviceId,nonce,packagename,content,appSignature)];
 	0
 
 
@@ -91,6 +89,7 @@ let ArbitraryAppInstalltion =
 	
 
 let AppInstallation =
+	new ~appId;
 	(HonestAppInstalltion + ArbitraryAppInstalltion)
 
 let Device =
@@ -104,7 +103,7 @@ let Device =
 	let status = 'valid' in
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId,status)];
-	[FinishSetUPSW(~deviceId,swId)]--[]->[];
+	[FinishSetUPSW(~deviceId)]--[]->[];
 	event A_finished();
 
 	!AppInstallation
@@ -129,19 +128,15 @@ let AtServerKA =
 
 let UnlockBootloader =
 	[SetUPSW(deviceId,status)]--[]->[];
-	if not(status = 'tamper') then
-		[]--[]->[SetUPSW(deviceId,'tamper')];
+	if not(status = 'invalid') then
+		[]--[]->[SetUPSW(deviceId,'invalid')];
 		0
 
 let KeyMasterTA =
 
-	new ~swId;
-
 	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId)];
 	
-	//retrieve an adversary's attempt to compomised the device
-	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
 	in(customSoftwareMeasurement);
 	
 	//Request attestation server
@@ -151,46 +146,35 @@ let KeyMasterTA =
 	new ~keymasterSk;
 	let  intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keymasterSk),rootSk) in
 
-	//retrieve an adversary's attempt to compomised the device
-	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
-
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[TOSW(appId,iid,deviceId,nonce,packagename,content,appSignature)]--[]->[];
 
 		new ~key;
 
 		new ~atId;
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
-		if(status = 'tamper') then
-			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = customSoftwareMeasurement in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
-			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
-			//send attestation report to the app
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-            event CreateCert(certificateChain);
-			out(certificateChain);
-			event S_finish();
-			0
-		else
-			let hardwareMeasurement = 'valid' in
-			let softwareMeasurement = 'valid' in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
-			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
-			//send attestation report to the app
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-            event CreateCert(certificateChain);
-			out(certificateChain);
+		let hardwareMeasurement = status in
+		let softwareMeasurement = customSoftwareMeasurement in
+		let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+		let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+		//send attestation report to the app
+		event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+		event CreateCert(certificateChain);
+		out(certificateChain);
+		
+		//retrive cipher
+		// in(aenc(<secret,secretSignature>,pk(~key)));
+		// event SecretReceived(secret);
 
-			//send secret to app after decryption
-			[TOSWS(deviceId,~swId,aenc(<secret,secretSignature>,pk(~key)))]--[]-> [];
-			[]--[]-> [TOAPPS(deviceId,~swId,<secret,secretSignature,true>)];
-			event Secret_Received_In_Valid_Device(secret,subjectCertificate);
+		// []--[]->[TOAPPS(appId,iid,<secret, secretSignature,true>)];
 
-			event S_finish();
-			0
+		event S_finish();
+
+
+		0
+
 			
 	)
 
@@ -199,6 +183,7 @@ let DevServerKA =
 
 	//creating and publising the application
 	new ~secret;
+	//event SecretGenerted(secret);
 	new ~secretSk;
 	new ~advk;
 	new ~content;
@@ -221,35 +206,28 @@ let DevServerKA =
 		out(~nonce);
 		
 		//retrieve blob from clients
-		in(<<subectTbs,subjectPk,subjectSi>, intermediateCertificate, rootCertificate>);
-		let subjectCertificate = <subectTbs,subjectPk,subjectSi> in
+		in(<<<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId>,subjectPk,subjectSi>, intermediateCertificate, rootCertificate>);
+		let subjectTbs = <atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId> in
+		let subjectCertificate = <subjectTbs,subjectPk,subjectSi> in
 		[!GetRootCertificate(rootCertificate)]--[]->[];
 
 		let verification1 = verify_certificate(subjectCertificate, intermediateCertificate) in
 		let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
 		let verification3 = verify_certificate(rootCertificate, rootCertificate) in
-		let tbsInfo = get_tbsInfo_certificate(subjectCertificate) in 
-		//let subjectpk = get_public_key_certificate(subjectCertificate) in
 
-		event D_finish('here');
-		//local verfication for key attestation chain
-		new ~vsid;
-		[]--[]->[VerficationCertificatehain('verification',<~vsid,verification1,verification2,verification3,<tbsInfo>>)];
-		[VerficationCertificatehain('verification',<~vsid,true,true,true,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId>>)]--[]->[];
-	
-		//let cipher = ~secret in 
+		event CheckVerify(~secret,verification1,verification2,verification3);
+		let cipher = ~secret in 
 		let secretSignature = sign(~secret,~secretSk) in
 		let cipher = aenc(<~secret,secretSignature>,subjectPk) in
+		event CipherGenerated(cipher);
 
 		//attestation finished		
-		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
+		if not(appSignature = fappSignature) | not(~packagename = fpackagename) | not(verification1 = verification2) | not(verification1 = true) then
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');	
 			event D_finish('invalid') 
 		else
             event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 			event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
-			event Secret_Sent(~secret,subjectCertificate);
-			event Secret_Generated(~secret);
 			out(cipher);
 			event D_finish('valid') 
 
@@ -284,7 +262,7 @@ let DevServer =
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
 
-(!Device || !DevServer || AtServer || !AttestationAgent || UnlockBootloader)
+(!Device || !DevServer || AtServer || !AttestationAgent || UnlockBootloader || !Np) 
 
 
 lemma CertPossible:
@@ -332,28 +310,23 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
+// lemma CheckVerifyCerts:
+// exists-trace
+// 	"Ex secret #i #j #k. 
+// 		CheckVerify(secret,true,true,true)@i 
+// 		& SecretReceived(secret)@j
+// 		& SecretReceivedVerfied(secret,true)@k"
+
+lemma CheckCipher:
+exists-trace
+			"Ex cipher #i #j. 
+				CipherGenerated(cipher)@i 
+				& CipherReceived(cipher)@j"	
+		
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 
 	
-// lemma SecretReceivedLemma:
-// 	"All secret #i. SecretReceived(secret,'valid')  @ i ==>
-	
-// 	(Ex #j #k subjectCert. Secret_Received_In_Valid_Device(secret,subjectCert) @ j
-// 		& Secret_Sent(secret,subjectCert) @ k
-// 	)
-// 	"
-
-// it is not possibile for all a secret that sent by a honest developer, decrypted by a valid device, verfied by honest that ku know the secret
-lemma secret_secrecy: 
-all-traces
-	"All secret #j.
-		//SecretReceived(secret,'valid')  @ i 
-		//& Secret_Received_In_Valid_Device(secret,subjectCert) @ j
-		//&
-		 Secret_Generated(secret) @ j
-	==> not (Ex #k. KU(secret)@k)"	
-
 //Sanity check: Attestation finished
 lemma Correctness_Both_Valid:
 exists-trace
