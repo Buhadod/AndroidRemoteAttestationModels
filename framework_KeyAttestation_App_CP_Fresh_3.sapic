@@ -227,9 +227,13 @@ let DevServerKA =
 			if (appSignature = fappSignature) & (~packagename = fpackagename) then
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
-				event SecretGenerated(~secret, cipher);
-				out(cipher);
-				event D_finish() 
+				event D_finish();
+				if(hardwareMeasurement = 'valid') then
+					event SecretGenerated(~secret, cipher);
+					out(cipher);
+					0
+				else
+					0
 			else
 				event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
 				event D_finish() 
@@ -327,9 +331,22 @@ exists-trace
 // 	exists-trace
 // 		"Ex secret cipher #i #j #k. SecretGenerated(secret,cipher) @i & SecretReceived(secret) @j & SecretReceivedApp(secret)@k"
 
-lemma SecretIntegrity:
-	exists-trace
-		"not(Ex secret cipher #i #k. SecretGenerated(secret,cipher) @i & KU(secret)@k)"
+lemma SecretIntegrityAgainstRepakedApp:
+exists-trace
+	"not(Ex secret cipher any #i #j #k. SecretGenerated(secret,cipher) @i & SecretReceivedatDevice(secret,any)@j & SecretReceivedAppStatus(secret,'invalid')@k & (#i<#j) & (#j<#k))"
+
+lemma SecretIntegrityAgainstRootedDevice:
+exists-trace
+	"not(Ex secret cipher #i #j. SecretGenerated(secret,cipher) @i & SecretReceivedatDevice(secret,'invalid')@j & (#i<#j))"
+	
+lemma SecretIntegrityAgainstNetworkAdversary:
+exists-trace
+	"not(Ex secret cipher #i #k. SecretGenerated(secret,cipher) @i & KU(secret)@k)"
+
+lemma CodeInjection:
+exists-trace
+	"not(Ex secret #i #j #k. SecretReceivedatDevice(secret,'valid')@i & SecretReceivedAppStatus(secret,'valid')@j & KU(secret)@k & (#i<#j))"
+
 
 // lemma SecretIntegrity:
 // 	all-traces
