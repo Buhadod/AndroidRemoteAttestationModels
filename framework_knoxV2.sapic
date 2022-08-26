@@ -39,7 +39,7 @@ let AppCode =
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,packagename,'App1Content',appSignature)];
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>))];
 	[ FROMSW(~sessionID,blob) ]--[]-> [];
 	out(blob);
 	0
@@ -47,9 +47,10 @@ let AppCode =
 let HonestAppInstallation =
 	event Checked('HonestAppInstallation');
 	//install an application
-	[!App_Published(devId,packagename,'App1Content',appSignature)]--[]-> [];
+	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
+	                   sign(advk, <'App1PackageName','App1Content',pk(advk)>)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,packagename,'App1Content',appSignature);
+	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>));
 
 	!AppCode // TOM: App code separate from installation 
 
@@ -73,8 +74,8 @@ let ArbitraryAppInstallation =
 
 	new ~content;  //TOM: contents are different from any honest app, so we model as a free name
 
-	let appSignature = sign(devKey, <packagename,~content>) in
-	let app = <packagename,~content,appSignature> in
+	let appSignature = sign(devKey, <packagename,~content,pk(devKey)>) in
+	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
 	event Application_Installed(~deviceId,packagename,~content,appSignature);
@@ -129,10 +130,6 @@ let KnoxV2TA =
 
 	//setup a SecureWorld
 	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
-	
-	//retrieve an adversary's attempt to compromised the device
-	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
-
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
@@ -147,16 +144,15 @@ let KnoxV2TA =
 			//in(customSoftwareMeasurement);
 			//let softwareMeasurement =  customSoftwareMeasurement in
 			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
+			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
 			event S_finish();
 			0
 		else
 			let hardwareMeasurement = 'valid' in
-			//let softwareMeasurement = 'valid' in
 			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
+			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
 			event S_finish();
@@ -164,45 +160,43 @@ let KnoxV2TA =
 			
 	)
 
+let DevServerProtocolCode =
+	// create a nonce
+	new ~nonce;
+	event NonceGenerated(~nonce);
+	[]--[]-> [Nonce_Sent(~devId,~nonce)];
+	out(~nonce);
+
+	//retrieve blob from clients
+	in(blob);
+
+	//create developer-attestation server session id, to keep track or pair of request-response message  
+	new ~sid;
+	[]--[]-> [TOAT(~sid,blob)];	// securely send blob to the attestation server
+
+	//retrieve the verified report the attestation server, pattern matching is used for checking the status
+	[FRAT(~sid,<atId,hardwareMeasurement,~nonce, deviceId>)]--[]-> [];
+
+	//attestation finished	//because measurement miss app info. so we assume always invalid	
+	event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid'); 
+	0
+
 
 let DevServerKV2 =
 
 	//creating and publishing the application
-	new ~advk;
+	new ~advk; // Dev server signing
+	new ~devId; 
 	// new ~content; REMOVED
-	new ~packagename;
-	let appSignature = sign(~advk, <~packagename,'App1Content'>) in //TOM: Why is this never checked?
-	let app = <~packagename,'App1Content',appSignature> in
+	//new ~packagename;
+	let appSignature = sign(~advk, <'App1PackageName','App1Content',pk(~advk)>) in 
+	let app = <'App1PackageName','App1Content',pk(~advk),appSignature> in
 	out(app);
-	event App_Created(~packagename,appSignature);
+	event App_Created('App1PackageName',appSignature);
 
-	new ~devId;
-	[]--[]-> [!App_Published(~devId,~packagename,'App1Content',appSignature)];
-	!(
+	[]--[]-> [!App_Published(~devId,app)];
 	
-		// create a nonce
-		new ~nonce;
-		event NonceGenerated(~nonce);
-		[]--[]-> [Nonce_Sent(~devId,~nonce)];
-		out(~nonce);
-		
-		//retrieve blob from clients
-		in(blob);
-		
-		//create developer-attestation server session id, to keep track or pair of request-response message  
-		new ~sid;
-		//send blob to the attestation server
-		[]--[]-> [TOAT(~sid,blob)];
-		
-		//retrieve the verified report the attestation server, pattern matching is used for checking the status
-		[FRAT(~sid,<atId,hardwareMeasurement,~nonce, deviceId>)]--[]-> [];
-		
-		//attestation finished	//because measurement miss app info. so we assume always invalid	
-		event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid'); 
-		0
-
-
-	)
+	!DevServerProtocolCode
 
 /*************************************** Generic code *************************************************/
 	
