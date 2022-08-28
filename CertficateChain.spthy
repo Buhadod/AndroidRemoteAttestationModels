@@ -182,3 +182,16 @@ lemma testVerifyTamperedCertificate: exists-trace "not Ex #i . AssertVerifyTampe
 lemma testChainCertficateWithExtensions: exists-trace "Ex #i  . AssertChainCertficateWithExtensions(true,true) @i "
 
 end
+
+
+==============================================================================
+summary of summaries:
+
+analyzed: CertficateChain.spthy
+
+  testChainCertificate (exists-trace): verified (2 steps)
+  testGetPublicKey (exists-trace): verified (2 steps)
+  testVerifyTamperedCertificate (exists-trace): verified (3 steps)
+  testChainCertficateWithExtensions (exists-trace): verified (2 steps)
+
+==============================================================================
