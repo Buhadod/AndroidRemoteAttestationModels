@@ -46,7 +46,7 @@ let HonestAppInstalltion =
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~deviceId,nonce,packagename,content,appSignature)];
 
 	0
 
@@ -66,7 +66,7 @@ let ArbitraryAppInstalltion =
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~deviceId,nonce,packagename,content,appSignature)];
 
 	0
 
@@ -84,13 +84,13 @@ let Device =
 	let status = 'valid' in
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId,status)];
-	[FinishSetUPSW(~deviceId,swId)]--[]->[];
+	[FinishSetUPSW(~deviceId)]--[]->[];
 	event A_finished();
 
 	!AppInstallation
 
 
-/***************************************** Knox V3 *****************************************/
+/***************************************** Knox V2 *****************************************/
 
 let AtServerKV2 =
 	!(
@@ -107,48 +107,35 @@ let AtServerKV2 =
 
 let UnlockBootloader =
 	[SetUPSW(deviceId,status)]--[]->[];
-	if not(status = 'tamper') then
-		[]--[]->[SetUPSW(deviceId,'tamper')];
+	if not(status = 'invalid') then
+		[]--[]->[SetUPSW(deviceId,'invalid')];
 		0
 
 let KnoxV2TA =
 
-	new ~swId;
-
 	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId)];
 	
 	//retrieve an adversary's attempt to compomised the device
-	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
-	in(customSoftwareMeasurement);
+	//in(customSoftwareMeasurement); // no need because the protocol is hardware-based (1) 
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[TOSW(deviceId,nonce,packagename,content,appSignature)]--[]->[];
 
 		
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
-		if(status = 'tamper') then
-			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement =  customSoftwareMeasurement in
-			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
-			out(packagename,appSignature);
-			event S_finish();
-			0
-		else
-			let hardwareMeasurement = 'valid' in
-			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
-			event S_finish();
-			0
+		let hardwareMeasurement = status in
+		//let softwareMeasurement =  customSoftwareMeasurement in // no need because the protocol is hardware-based (1) 
+		let blob = rep(<~atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>) in 
+		///send attestation report to the attestation server
+		event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+		out(blob);
+		out(packagename,appSignature);
+		event S_finish();
+		0
 			
 	)
 
@@ -185,7 +172,7 @@ let DevServerKV2 =
 		//retreive the verfied report the attestation server, pattern matching is used for checking the status
 		[FRAT(~sid,<atId,hardwareMeasurement,~nonce, deviceId>)]--[]-> [];
 		
-		//attestation finished	//becasue measurement miss app info. so we assume always invalid	
+		//attestation finished	//becasue measurement miss app info. so we always assume invalid	
 		event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid'); 
 		0
 
@@ -248,26 +235,73 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
+// Check if nonce are unique 
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 	
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
 	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
 
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
 	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
 
-
-lemma Correctness_TV:
+//Sanity check: Creation of an honest application 
+lemma Correctness_Honest_App:
 exists-trace
 	"Ex #i. Checked('HonestAppInstalltion') @ i"
 
-lemma Correctness_TI:
+//Sanity check: Creation of an arbitrary application 
+lemma Correctness_Arbitrary_App:
 exists-trace
 	"Ex #i. Checked('ArbitraryAppInstalltion') @ i"
 	
 end
+
+// ==============================================================================
+// summary of summaries:
+
+//   solved goal nr. 108 (precomputed):
+//     SetUPSW( ~deviceId.1, status ) ▶₁ #vr.90
+//   solved goal nr. 142 (precomputed):
+//     SetUPSW( ~deviceId.1, status ) ▶₁ #vr.109
+//   solved goal nr. 108 (precomputed):
+//     SetUPSW( ~deviceId.1, status ) ▶₁ #vr.90
+//   simplified formula:
+//       "¬('valid' = 'invalid')"
+//     to
+//       "⊤"
+//   simplified formula:
+//       "¬('valid' = 'invalid')"
+//     to
+//       "⊤"
+//   simplified formula:
+//       "¬('valid' = 'invalid')"
+//     to
+//       "⊤"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+// analyzed: framework_knoxV2.sapic
+
+//   DeviceAndAppIntegrity (all-traces): falsified - found trace (5 steps)
+//   RepackedAppIntegrity (all-traces): falsified - found trace (4 steps)
+//   UniqueNonce (all-traces): verified (8 steps)
+//   Correctness_Both_Valid (exists-trace): falsified - no trace found (1 steps)
+//   Correctness_Rooting_Device (exists-trace): verified (5 steps)
+//   Correctness_Honest_App (exists-trace): verified (4 steps)
+//   Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+
+// ==============================================================================

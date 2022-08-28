@@ -317,7 +317,20 @@ lemma RepackedAppIntegrity:
 
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
-	
+
+
+
+
+/***************Testing******************* */
+
+lemma SecretValidity:
+	all-traces
+		"All secret #i. SecretReceivedAppStatus(secret,'valid')@k ==>
+		(Ex #i. SecretGenerated(secret) @i & SecretReceivedatDevice(secret,'valid')@j &  (#i<#j) & (#j<#k))"
+
+/***************End Testing*************** */
+
+
 lemma CorrectnessValidSecret:
 exists-trace
 	"Ex secret cipher #i #j #k. SecretGenerated(secret,cipher) @i & SecretReceivedatDevice(secret,'valid')@j & SecretReceivedAppStatus(secret,'valid')@k & (#i<#j) & (#j<#k)"
@@ -345,16 +358,11 @@ lemma CodeInjection:
 exists-trace
 	"not(Ex secret #i #j #k. SecretReceivedatDevice(secret,'valid')@i & SecretReceivedAppStatus(secret,'valid')@j & KU(secret)@k & (#i<#j))"
 
-//can repack app inject code? no. becuase there is no app <=== no need becuase the app already under the attacker control
-// lemma CodeInjectionByRepakedApp:
-// exists-trace
-// 	"not(Ex secret #i #j. SecretReceivedatDevice(secret,'valid')@i & SecretReceivedAppStatus(secret,'invalid')@j & (#i<#j))"
-
 //can rooted device, inecjt valid app? yes becuase the device rooted. full control over everything
 // Code injection on rooted device : It is a possibile for a remote advsery to inject a source code intro an honest app  if the device under the attacker control.
 lemma CodeInjectionByRootedDevice:
 exists-trace
-		"(Ex secret #i #j #k. SecretReceivedatDevice(secret,'invalid')@i & SecretReceivedAppStatus(secret,'valid')@j & KU(secret)@k  & (#i<#j))"
+	"(Ex secret #i #j #k. SecretReceivedatDevice(secret,'invalid')@i & SecretReceivedAppStatus(secret,'valid')@j & KU(secret)@k  & (#i<#j))"
 	
 
 
@@ -386,14 +394,14 @@ end
 // analyzed: framework_KeyAttestation_App_CP.sapic
 
 //   CertPossible (exists-trace): verified (15 steps)
-//   CertFresh (all-traces): analysis incomplete (1 steps)
+//   CertFresh (all-traces): verified (85 steps)
 //   DeviceAndAppIntegrity (all-traces): verified (82 steps)
 //   RepackedAppIntegrity (all-traces): verified (162 steps)
-//   UniqueNonce (all-traces): analysis incomplete (1 steps)
+//   UniqueNonce (all-traces): verified (8 steps)
 //   CorrectnessValidSecret (exists-trace): verified (19 steps)
-//   SecretIntegrityAgainstNetworkAdversary (exists-trace): analysis incomplete (1 steps)
-//   SecretIntegrityAgainstRepakedApp (exists-trace): analysis incomplete (1 steps)
-//   SecretIntegrityAgainstRootedDevice (exists-trace): analysis incomplete (1 steps)
+//   SecretIntegrityAgainstNetworkAdversary (exists-trace): verified (3 steps)
+//   SecretIntegrityAgainstRepakedApp (exists-trace): verified (3 steps)
+//   SecretIntegrityAgainstRootedDevice (exists-trace): verified (3 steps)
 //   CodeInjection (exists-trace): verified (3 steps)
 //   CodeInjectionByRootedDevice (exists-trace): verified (12 steps)
 //   Correctness_Both_Valid (exists-trace): analysis incomplete (1 steps)

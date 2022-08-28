@@ -75,8 +75,23 @@ let Bob =
 	0
 
 
-(!Alice || !Bob)
+let Dave =
+		event PrintStatus(status);
+		0
 
+let Ed =
+		let status = 'invalid' in
+		event PrintStatus(status);
+		0
+
+let Cat =
+		let status = 'valid' in
+		(Dave | Ed)
+		
+	
+		
+(!Alice || !Bob || Cat)
+// (!Cat)
 
 
 lemma Correctness_CR:
@@ -97,4 +112,8 @@ lemma Correctness_KC:
 	all-traces
 		"not(Ex cipher #i #j. Cipher_Sent(cipher) @ i & KU(cipher) @j)"
 			
+lemma Print_Status:
+	exists-trace
+		"Ex #i #j. PrintStatus('valid') @i & PrintStatus('invalid') @j"
+				
 end

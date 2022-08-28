@@ -32,80 +32,72 @@ equations:
 
 /***************************************** Generic *****************************************/
 
-let KeyApp = 
+let AppCode = 
     [Nonce_Sent(devId,nonce)]--[]-> [];
 
 	event NonceRecieved(nonce);
 
-	new ~bid;
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~apid,~bid,~deviceId,swId,nonce,packagename,content,appSignature)];
-	[TOAPP(~apid,~bid,<secret,signature>,verify(signature,secret,secretPk))]--[]->[];
-
-	event SecretReceivedApp(secret);
-	//event SecretReceivedValidApp(secret);
-	event SecretReceivedAppStatus(secret,'valid');
+	new ~sessionID;
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>))];
+	[ FROMSW(~sessionID,certificateChain) ]--[]-> [];
+	out(certificateChain);
 
 	0
 
-let HonestAppInstalltion =
-	event Checked('HonestAppInstalltion');
+let HonestAppInstallation =
+	event Checked('HonestAppInstallation');
 	//install an application
-	[!App_Published(devId,packagename,content,appSignature,secretPk)]--[]-> [];
+	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
+	                   sign(advk, <'App1PackageName','App1Content',pk(advk)>)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,packagename,content,appSignature);
+	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>));
 
-	!KeyApp
+	!AppCode 
 
-let ArbitraryApp =
-    //receive a nonce
+let ArbitraryAppCode =
+
 	in(nonce);
-
-	event NonceRecieved(nonce);
-
-	new ~bid;
+	event NonceReceived(nonce);
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~apid,~bid,~deviceId,swId,nonce,packagename,content,appSignature)];
-	[TOAPP(~apid,~bid,<secret,signature>,verify(signature,secret,secretPk))]--[]->[];
-
-	event SecretReceivedApp(secret);
-	event SecretReceivedAppStatus(secret,'invalid');
+	new ~sessionID;
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
+	[ FROMSW(~sessionID,certificateChain) ]--[]-> [];
+	out(certificateChain);
 	0
 
 
-let ArbitraryAppInstalltion =
-	event Checked('ArbitraryAppInstalltion');
+let ArbitraryAppInstallation =
+
+	event Checked('ArbitraryAppInstallation');
 	//install an application
-	in(<packagename,content>);
-	new ~hash;
-	let appSignature = ~hash in
+	in(<packagename, devKey>); 
 
-	in(secretPk);
+	new ~content;
 
-	event Application_Installed(~deviceId,packagename,content,appSignature);
+	let appSignature = sign(devKey, <packagename,~content,pk(devKey)>) in
+	let app = <packagename,~content,pk(devKey),appSignature> in
+	out(app);
+	event Arbitrary_App_Created(packagename,appSignature);
+	event Application_Installed(~deviceId,packagename,~content,appSignature);
 
-    !ArbitraryApp
+	!ArbitraryAppCode
 	
-
-let AppInstallation =
-	new ~apid;
-	(HonestAppInstalltion + ArbitraryAppInstalltion)
 
 let Device =
 
 	//Create device reference
-	new ~deviceId;
+	new ~deviceId; 
 
-	//send the device refernece , allows an advsery to tamper the device
+	//send the device reference , allows an adversary to tamper the device
 	out(~deviceId);
 	
-	let status = 'valid' in
 	//setup a secureWorld
-	[]--[]-> [SetUPSW(~deviceId,status)];
+	[]--[]-> [SetUPSW(~deviceId)];
 	[FinishSetUPSW(~deviceId,swId)]--[]->[];
 	event A_finished();
 
-	!AppInstallation
+	(!HonestAppInstallation | !ArbitraryAppInstallation)
 
 
 /***************************************** Knox V3 *****************************************/
@@ -125,21 +117,14 @@ let AtServerKA =
 		event T_finish() 
 	)
 
-let UnlockBootloader =
-	[SetUPSW(deviceId,status)]--[]->[];
-	if not(status = 'invalid') then
-		[]--[]->[SetUPSW(deviceId,'invalid')];
-		0
-
+	
 let KeyMasterTA =
 
-	new ~swId;
+	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
-	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
-	
-	//retrieve an adversary's attempt to compomised the device
-	in(customSoftwareMeasurement);
+	//setup a SecureWorld
+	[SetUPSW(deviceId)]--[]->[FinishSetUPSW(deviceId,~swId)];
+
 	
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
@@ -148,53 +133,47 @@ let KeyMasterTA =
 	new ~keymasterSk;
 	let  intermediateCertificate = create_certificate('TbsKeyStoreInfo',pk(~keymasterSk),rootSk) in
 
+	//attempt to unlock the bootloader
+	in(attempt);
+
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(apid, bid,deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[TOSW(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
 
 		new ~key;
 
 		new ~atId;
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
-		let hardwareMeasurement = status in
-		let softwareMeasurement = customSoftwareMeasurement in
-		let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
-		let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
-		//send attestation report to the app
-		event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-		event CreateCert(certificateChain);
-		out(certificateChain);
-		event S_finish();
-
-		in(aenc(<secret,signature>,pk(~key)));
-		event SecretReceived(secret);
-		event SecretReceivedatDevice(secret,hardwareMeasurement);
-		[]--[]->[TOAPP(apid,bid,<secret,signature>,true)];
-
-		0
+		if(attempt = 'unlockBootloader') then
+			let hardwareMeasurement = 'invalid' in
+			//let softwareMeasurement = customSoftwareMeasurement in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+            event CreateCert(certificateChain);
+			[]--[]->[ FROMSW(sessionID,certificateChain) ];
+			event S_finish();
+			0
+		else
+			let hardwareMeasurement = 'valid' in
+			//let softwareMeasurement = 'valid' in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
+			//send attestation report to the app
+			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+            event CreateCert(certificateChain);
+			[]--[]->[ FROMSW(sessionID,certificateChain) ];
+			event S_finish();
+			0
+	
 			
 	)
 
 
-let DevServerKA =
 
-	//creating and publising the application
-	new ~advk;
-	new ~content;
-	new ~packagename;
-	let appSignature = sign(~advk, <~packagename,~content>) in
-	let app = <~packagename,~content,appSignature> in
-	out(app);
-	event App_Created(~packagename,appSignature);
-
-	//secret verfication key
-	new ~secretSk;
-	out(pk(~secretSk));
-
-	new ~devId;
-	[]--[]-> [!App_Published(~devId,~packagename,~content,appSignature,pk(~secretSk))];
-	!(
+let DevServerProtocolCode =
 	
 		// create a nonce
 		new ~nonce;
@@ -209,33 +188,38 @@ let DevServerKA =
 		let subjectTbs = <atId,hardwareMeasurement,~nonce,fpackagename,fappSignature,deviceId> in
 		let subjectCertificate = <subjectTbs,subjectPk,subjectChain> in
 		[!GetRootCertificate(rootCertificate)]--[]->[];
-
+		
 		let verification1 = verify_certificate(subjectCertificate, intermediateCertificate) in
 		let verification2 = verify_certificate(intermediateCertificate, rootCertificate) in
-		//let verification3 = verify_certificate(rootCertificate, rootCertificate) in
+		let verification3 = verify_certificate(rootCertificate, rootCertificate) in 
 
-		//generate secret
-		new ~secret;
-		let signature = sign(~secret,~secretSk) in 
-		let cipher = aenc(<~secret,signature>, subjectPk) in
-		event SecretGenerated(~secret, cipher);
 		
-
-		//attestation finished	
-		if(verification1 = verification2) & (verification1 = true) then	
-			if (appSignature = fappSignature) & (~packagename = fpackagename) then
+		if(verification1 = verification2) & (verification1 = true) then		
+			if (appSignature = fappSignature) & (packagename = fpackagename)  then
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
-				out(cipher);
 				event D_finish() 
+				
 			else
 				event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
 				event D_finish() 
-				
 
 
-	)
 
+let DevServerKA =
+
+	//creating and publishing the application
+	new ~advk; // Dev server signing
+	new ~devId; 
+	let packagename = 'App1PackageName' in
+	let appSignature = sign(~advk, <'App1PackageName','App1Content',pk(~advk)>) in 
+	let app = <'App1PackageName','App1Content',pk(~advk),appSignature> in
+	out(app);
+	event App_Created('App1PackageName',appSignature);
+
+	[]--[]-> [!App_Published(~devId,app)];
+	
+	!DevServerProtocolCode
 /*************************************** Generic code *************************************************/
 	
 // Main process starts here
@@ -264,7 +248,7 @@ let DevServer =
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
 
-(!Device || !DevServer || AtServer || !AttestationAgent || UnlockBootloader)
+(!Device || !DevServer || AtServer || !AttestationAgent)
 
 
 lemma CertPossible:
@@ -280,6 +264,9 @@ lemma CertFresh:
             ==>   Ex #j. RequestCert(requestID)@j
 			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
 			    & #j < #k & #k < #i" 
+
+
+
 
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
@@ -309,64 +296,45 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
+// Check if nonce are unique 
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 	
-lemma CorrectnessValidSecret:
-exists-trace
-	"Ex secret cipher #i #j #k. SecretGenerated(secret,cipher) @i & SecretReceivedatDevice(secret,'valid')@j & SecretReceivedAppStatus(secret,'valid')@k & (#i<#j) & (#j<#k)"
-
-lemma SecretIntegrity: 
-	all-traces 
-	 "All secret cipher #i. SecretGenerated(secret,cipher) @i ==> 
-	 (not (Ex #j. KU(secret)@j)) | (not (Ex #j.SecretReceivedatDevice(secret,'invalid')@j)) | (not (Ex #j.SecretReceivedAppStatus(secret,'invalid')@j))"
-
-// lemma CorrectSecret:
-// 	exists-trace
-// 		"Ex secret cipher #i #j #k. SecretGenerated(secret,cipher) @i & SecretReceived(secret) @j & SecretReceivedApp(secret)@k"
-
-lemma CorrectSecretKU:
-	exists-trace
-		"not(Ex secret cipher #i #k. SecretGenerated(secret,cipher) @i & KU(secret)@k)"
-
-// lemma SecretIntegrity:
-// 	all-traces
-// 	"All secret #i. SecretGenerated(secret,cipher) @i ==>
-// 	(
-// 		not(Ex #k1 #k2. KU(secret) @k1 | SecretReceivedAppStatus(secret,'invalid') @k2)
-// 	)"
-
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
 	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
 
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
 	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
 
-
-lemma Correctness_TV:
+//Sanity check: Creation of an honest application 
+lemma Correctness_Honest_App:
 exists-trace
-	"Ex #i. Checked('HonestAppInstalltion') @ i"
+	"Ex #i. Checked('HonestAppInstallation') @ i"
 
-lemma Correctness_TI:
+//Sanity check: Creation of an arbitrary application 
+lemma Correctness_Arbitrary_App:
 exists-trace
-	"Ex #i. Checked('ArbitraryAppInstalltion') @ i"
+	"Ex #i. Checked('ArbitraryAppInstallation') @ i"
 	
 end
 
-// 	 Sun 21 Aug 2022 07:50:14 PM +03
-// 	 CertPossible (exists-trace): analysis incomplete (1 steps)
-//   CertFresh (all-traces): analysis incomplete (1 steps)
-//	 DeviceAndAppIntegrity (all-traces): verified (82 steps)
-//	 RepackedAppIntegrity (all-traces): verified (162 steps)
-//   UniqueNonce (all-traces): analysis incomplete (1 steps)
-//   CorrectValidSecret (exists-trace): verified (19 steps)
-//   CorrectSecret (exists-trace): analysis incomplete (1 steps)
-//   CorrectSecretKU (exists-trace): analysis incomplete (1 steps)
-//   Correctness_Both_Valid (exists-trace): analysis incomplete (1 steps)
-//   Correctness_Rooting_Device (exists-trace): analysis incomplete (1 steps)
-//   Correctness_TV (exists-trace): analysis incomplete (1 steps)
-//   Correctness_TI (exists-trace): analysis incomplete (1 steps)
+==============================================================================
+summary of summaries:
+
+analyzed: framework_KeyAttestation_App_Nonce.sapic
+
+  CertPossible (exists-trace): verified (14 steps)
+  CertFresh (all-traces): verified (258 steps)
+  DeviceAndAppIntegrity (all-traces): verified (432 steps)
+  RepackedAppIntegrity (all-traces): verified (862 steps)
+  UniqueNonce (all-traces): verified (8 steps)
+  Correctness_Both_Valid (exists-trace): verified (14 steps)
+  Correctness_Rooting_Device (exists-trace): verified (15 steps)
+  Correctness_Honest_App (exists-trace): verified (4 steps)
+  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+
+==============================================================================

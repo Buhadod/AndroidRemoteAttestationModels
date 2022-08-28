@@ -46,7 +46,7 @@ let HonestAppInstalltion =
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~deviceId,nonce,packagename,content,appSignature)];
 
 	0
 
@@ -66,7 +66,7 @@ let ArbitraryAppInstalltion =
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
-	[]--[]-> [TOSW(~deviceId,swId,nonce,packagename,content,appSignature)];
+	[]--[]-> [TOSW(~deviceId,nonce,packagename,content,appSignature)];
 
 	0
 
@@ -84,7 +84,7 @@ let Device =
 	let status = 'valid' in
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId,status)];
-	[FinishSetUPSW(~deviceId,swId)]--[]->[];
+	[FinishSetUPSW(~deviceId)]--[]->[];
 	event A_finished();
 
 	!AppInstallation
@@ -107,47 +107,35 @@ let AtServerSN =
 
 let UnlockBootloader =
 	[SetUPSW(deviceId,status)]--[]->[];
-	if not(status = 'tamper') then
-		[]--[]->[SetUPSW(deviceId,'tamper')];
+	if not(status = 'invalid') then
+		[]--[]->[SetUPSW(deviceId,'invalid')];
 		0
 
 let GooglePlay =
 
-	new ~swId;
-
 	//setup a Secureworld
-	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId,~swId)];
+	[SetUPSW(deviceId,status)]--[]->[FinishSetUPSW(deviceId)];
 	
 	//retrieve an adversary's attempt to compomised the device
-	//[!BootloaderStatus(status,customSoftwareMeasurement)]--[]->[];
 	in(customSoftwareMeasurement);
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[TOSW(deviceId,nonce,packagename,content,appSignature)]--[]->[];
 
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
-		if(status = 'tamper') then
-			let hardwareMeasurement = 'invalid' in
-			let softwareMeasurement = customSoftwareMeasurement in
-			let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
-			out(packagename,appSignature);
-			event S_finish();
-			0
-		else
-			let hardwareMeasurement = 'valid' in
-			let softwareMeasurement = 'valid' in
-			let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
-			///send attestation report to the attestation server
-			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			out(blob);
-			event S_finish();
-			0
+		let hardwareMeasurement = status in
+		let softwareMeasurement = customSoftwareMeasurement in
+		let blob = rep(<~atId,softwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+		///send attestation report to the attestation server
+		event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+		out(blob);
+		out(packagename,appSignature);
+		event S_finish();
+		0
+		
 			
 	)
 
@@ -185,11 +173,11 @@ let DevServerSN =
 		[FRAT(~sid,<atId,measurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
 		
 		//attestation finished		
-		if not(appSignature = fappSignature) | not(~packagename = fpackagename)  then
-			event Verdict_app(atId,deviceId,measurement,'invalid');
+		if (appSignature = fappSignature) & (~packagename = fpackagename)  then
+			event Verdict_app(atId,deviceId,measurement,'valid');
 			event D_finish() 
 		else
-			event Verdict_app(atId,deviceId,measurement,'valid');
+			event Verdict_app(atId,deviceId,measurement,'invalid');
 			event D_finish() 
 
 
@@ -251,26 +239,62 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
+// Check if nonce are unique 
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 	
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
 	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
 
-//Sanity check: Attestation finished
+//Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
 	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
 
-
-lemma Correctness_TV:
+//Sanity check: Creation of an honest application 
+lemma Correctness_Honest_App:
 exists-trace
 	"Ex #i. Checked('HonestAppInstalltion') @ i"
 
-lemma Correctness_TI:
+//Sanity check: Creation of an arbitrary application 
+lemma Correctness_Arbitrary_App:
 exists-trace
 	"Ex #i. Checked('ArbitraryAppInstalltion') @ i"
 	
 end
+
+// ==============================================================================
+// summary of summaries:
+
+//   solved goal nr. 198 (precomputed):
+//     SetUPSW( ~deviceId.1, status ) ▶₁ #vr.123
+//   simplified formula:
+//       "¬('valid' = 'invalid')"
+//     to
+//       "⊤"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+//   simplified formula:
+//       "¬('invalid' = 'invalid')"
+//     to
+//       "⊥"
+// analyzed: framework_SafetyNetSW.sapic
+
+//   DeviceAndAppIntegrity (all-traces): falsified - found trace (7 steps)
+//   RepackedAppIntegrity (all-traces): falsified - found trace (8 steps)
+//   UniqueNonce (all-traces): verified (8 steps)
+//   Correctness_Both_Valid (exists-trace): verified (4 steps)
+//   Correctness_Rooting_Device (exists-trace): verified (4 steps)
+//   Correctness_Honest_App (exists-trace): verified (4 steps)
+//   Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+
+// ==============================================================================
+
