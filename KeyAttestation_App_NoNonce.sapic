@@ -148,7 +148,8 @@ let KeyMasterTA =
 		if(attempt = 'unlockBootloader') then
 			let hardwareMeasurement = 'invalid' in
 			//let softwareMeasurement = customSoftwareMeasurement in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,cdate,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			in(<fpackagename,fappSignature>);	// adversary's custom softeware-based values
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,cdate,fpackagename,fappSignature>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
@@ -159,7 +160,7 @@ let KeyMasterTA =
 		else
 			let hardwareMeasurement = 'valid' in
 			//let softwareMeasurement = 'valid' in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,cdate,packagename,appSignature,deviceId>,pk(~key),~keymasterSk) in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,cdate,packagename,appSignature>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
@@ -180,8 +181,8 @@ let DevServerProtocolCode =
 		[]--[]-> [Request_Cert(~devId)];
 				
 		//retrieve blob from clients
-		in(<<<atId,hardwareMeasurement,cdate,fpackagename,fappSignature,deviceId>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>);
-		let subjectTbs = <atId,hardwareMeasurement,cdate,fpackagename,fappSignature,deviceId> in
+		in(<<<atId,hardwareMeasurement,cdate,fpackagename,fappSignature>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>);
+		let subjectTbs = <atId,hardwareMeasurement,cdate,fpackagename,fappSignature> in
 		let subjectCertificate = <subjectTbs,subjectPk,subjectChain> in
 		[!GetRootCertificate(rootCertificate)]--[]->[];
 		
@@ -193,11 +194,11 @@ let DevServerProtocolCode =
 		if(verification1 = verification2) & (verification1 = true) then		
 			if (appSignature = fappSignature) & (packagename = fpackagename)  then
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
-				event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
+				event Verdict_app(atId,hardwareMeasurement,'valid');
 				event D_finish() 
 				
 			else
-				event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
+				event Verdict_app(atId,hardwareMeasurement,'invalid');
 				event D_finish() 
 
 
@@ -267,10 +268,10 @@ lemma CertFresh:
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
-	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i ==> 
+	"(All atId #i. Verdict_app(atId,'valid','valid') @ i ==> 
 	( 
-	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex packagename appSignature #j #k. 
+	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex deviceId packagename appSignature #j #k. 
 			 App_Created(packagename,appSignature) @ j 
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
 	))"
@@ -278,10 +279,10 @@ lemma DeviceAndAppIntegrity:
 
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
-	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','invalid') @ i ==> 
+	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
 	( 
-	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex packagename fpackagename appSignature fappSignature #j #k. 
+	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
 			 App_Created(packagename,appSignature) @ j 
 			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
 			 & (
@@ -292,19 +293,19 @@ lemma RepackedAppIntegrity:
 		)
 	))"
 
-// Check if nonce are unique 
+// Check if nonce are unique (commented because there is no nonce here)
 // lemma UniqueNonce:
 // 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 	
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
-	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
+	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
 
 //Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
-	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
+	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
 
 //Sanity check: Creation of an honest application 
 lemma Correctness_Honest_App:
@@ -321,14 +322,14 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: framework_KeyAttestation_App_NoNonce.sapic
+analyzed: KeyAttestation_App_NoNonce.sapic
 
-  CertPossible (exists-trace): verified (13 steps)
-  CertFresh (all-traces): falsified - found trace (12 steps)
-  DeviceAndAppIntegrity (all-traces): verified (432 steps)
+  CertPossible (exists-trace): verified (12 steps)
+  CertFresh (all-traces): falsified - found trace (11 steps)
+  DeviceAndAppIntegrity (all-traces): verified (284 steps)
   RepackedAppIntegrity (all-traces): verified (168 steps)
-  Correctness_Both_Valid (exists-trace): verified (13 steps)
-  Correctness_Rooting_Device (exists-trace): verified (14 steps)
+  Correctness_Both_Valid (exists-trace): verified (12 steps)
+  Correctness_Rooting_Device (exists-trace): verified (12 steps)
   Correctness_Honest_App (exists-trace): verified (4 steps)
   Correctness_Arbitrary_App (exists-trace): verified (4 steps)
 

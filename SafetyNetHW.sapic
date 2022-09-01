@@ -52,7 +52,7 @@ let HonestAppInstallation =
 
 	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>));
 
-	!AppCode // TOM: App code separate from installation 
+	!AppCode //App code separate from installation 
 
 
 let ArbitraryAppCode =
@@ -68,11 +68,9 @@ let ArbitraryAppCode =
 let ArbitraryAppInstallation =
 	event Checked('ArbitraryAppInstallation');
 	//install an application
-	in(<packagename, devKey>); //TOM Attacker can pick the app name and the dev key.
-	//REMOVED: new ~hash;
-	//REMOVED: let appSignature = ~hash in
+	in(<packagename, devKey>); //Attacker can pick the app name and the dev key.
 
-	new ~content;  //TOM: contents are different from any honest app, so we model as a free name
+	new ~content;  //contents are different from any honest app, so we model as a free name
 
 	let appSignature = sign(devKey, <packagename,~content,pk(devKey)>) in
 	let app = <packagename,~content,pk(devKey),appSignature> in
@@ -86,7 +84,7 @@ let ArbitraryAppInstallation =
 let Device =
 
 	//Create device reference
-	new ~deviceId;   // TOM: Is the device ID secure?
+	new ~deviceId;   
 
 	//send the device reference , allows an adversary to tamper the device
 	out(~deviceId);
@@ -96,7 +94,7 @@ let Device =
 	[FinishSetUPSW(~deviceId,swId)]--[]->[];
 	event A_finished();
 
-	(!HonestAppInstallation | !ArbitraryAppInstallation) //TOM
+	(!HonestAppInstallation | !ArbitraryAppInstallation) 
 
 
 /***************************************** SafetyNetHW *****************************************/
@@ -105,10 +103,10 @@ let AtServerSN =
 	!(
 
 		//retrieve the blob from the developer server and verify it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,nonce, deviceId>,<~skAT,'Trustzone'>))]--[]-> [];
+        [TOAT(sid,rep(<atId,hardwareMeasurement,nonce,packagename,appSignature>,<~skAT,'Trustzone'>))]--[]-> [];
 
 		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,nonce, deviceId> in
+		let verdict = <atId,hardwareMeasurement,nonce,packagename,appSignature> in
         []--[]-> [FRAT(sid,verdict)];
 
 		event T_finish() 
@@ -137,7 +135,8 @@ let SafetyNetTA =
 			// Software measurment not used in HW attestation
 			//in(customSoftwareMeasurement);
 			//let softwareMeasurement =  customSoftwareMeasurement in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			in(<fnonce,fpackagename,fappSignature>);	// adversary's custom softeware-based values
+			let blob = rep(<~atId,hardwareMeasurement,fnonce,fpackagename,fappSignature>,<~skAT,'Trustzone'>) in 
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
@@ -145,7 +144,7 @@ let SafetyNetTA =
 			0
 		else
 			let hardwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature, deviceId>,<~skAT,'Trustzone'>) in 
+			let blob = rep(<~atId,hardwareMeasurement,nonce,packagename,appSignature>,<~skAT,'Trustzone'>) in 
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
@@ -169,15 +168,15 @@ let DevServerProtocolCode =
 	[]--[]-> [TOAT(~sid,blob)];	// securely send blob to the attestation server
 
 	//retrieve the verfied report the attestation server, pattern matching is used for checking the status
-	[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature, deviceId>)]--[]-> [];
+	[FRAT(~sid,<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature>)]--[]-> [];
 		
 
 	//attestation finished		
 	if (appSignature = fappSignature) & (packagename = fpackagename)  then
-		event Verdict_app(atId,deviceId,hardwareMeasurement,'valid');
+		event Verdict_app(atId,hardwareMeasurement,'valid');
 		event D_finish() 
 	else
-		event Verdict_app(atId,deviceId,hardwareMeasurement,'invalid');
+		event Verdict_app(atId,hardwareMeasurement,'invalid');
 		event D_finish() 
 	
 
@@ -187,8 +186,7 @@ let DevServerSN =
 	//creating and publishing the application
 	new ~advk; // Dev server signing
 	new ~devId; 
-	// new ~content; REMOVED
-	//new ~packagename;
+
 	let packagename = 'App1PackageName' in
 	let appSignature = sign(~advk, <packagename,'App1Content',pk(~advk)>) in 
 	let app = <packagename,'App1Content',pk(~advk),appSignature> in
@@ -230,10 +228,10 @@ new ~skAT;
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
 lemma DeviceAndAppIntegrity:
-	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i ==> 
+	"(All atId #i. Verdict_app(atId,'valid','valid') @ i ==> 
 	( 
-	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex packagename appSignature #j #k. 
+	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex deviceId packagename appSignature #j #k. 
 			 App_Created(packagename,appSignature) @ j 
 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
 	))"
@@ -241,10 +239,10 @@ lemma DeviceAndAppIntegrity:
 
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
-	"(All atId deviceId #i. Verdict_app(atId,deviceId,'valid','invalid') @ i ==> 
+	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
 	( 
-	(Ex #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex packagename fpackagename appSignature fappSignature #j #k. 
+	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
 			 App_Created(packagename,appSignature) @ j 
 			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
 			 & (
@@ -262,12 +260,12 @@ lemma UniqueNonce:
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
-	"Ex atId deviceId #i. Verdict_app(atId,deviceId,'valid','valid') @ i"
+	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
 
 //Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
-	"Ex atId any deviceId #i. Verdict_app(atId,deviceId,'invalid',any) @ i"
+	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
 
 //Sanity check: Creation of an honest application 
 lemma Correctness_Honest_App:
@@ -284,13 +282,13 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: framework_SafetyNetHW.sapic
+analyzed: SafetyNetHW.sapic
 
   DeviceAndAppIntegrity (all-traces): verified (8 steps)
   RepackedAppIntegrity (all-traces): verified (7 steps)
   UniqueNonce (all-traces): verified (8 steps)
   Correctness_Both_Valid (exists-trace): verified (4 steps)
-  Correctness_Rooting_Device (exists-trace): verified (4 steps)
+  Correctness_Rooting_Device (exists-trace): verified (6 steps)
   Correctness_Honest_App (exists-trace): verified (4 steps)
   Correctness_Arbitrary_App (exists-trace): verified (4 steps)
 
