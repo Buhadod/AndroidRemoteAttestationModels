@@ -8,26 +8,14 @@
 theory Framework_KnoxV2
 begin
 
-builtins: signing, asymmetric-encryption
+builtins: signing, asymmetric-encryption, locations-report
 
-functions: check_rep/2,  get_rep/1, rep/2 [private], create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+heuristic: S
 
-equations:
-    check_rep(rep(x.1, x.2), x.2) = true,
-    get_rep(rep(x.1, x.2)) = x.1,
 
-    create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
-      = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
+predicates:
+Report(x,y) <=> not  (fst(y)= 'loc')
 
-    verify_certificate( 
-    < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-     , < IssuerTBSCertificateInfo, pk(IssuerSk), sign(<IssuerTBSCertificateInfo, pk(IssuerSk)>,IssuerRootSk) >
-          ) = true,
-
-    get_tbsInfo_certificate( 
-        < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
-          ) = SubjectTBSCertificateInfo
-      
 
 
 /***************************************** Generic *****************************************/
@@ -39,18 +27,20 @@ let AppCode =
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>))];
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>,advk))];
 	[ FROMSW(~sessionID,blob) ]--[]-> [];
-	out(blob);
+
+	[]--[]-> [Blob_Sent(blob)];
 	0
+
 
 let HonestAppInstallation =
 	event Checked('HonestAppInstallation');
 	//install an application
 	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
-	                   sign(advk, <'App1PackageName','App1Content',pk(advk)>)>)]--[]-> [];
+	                   sign(<'App1PackageName','App1Content',pk(advk)>,advk)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(advk, <'App1PackageName','App1Content',pk(advk)>));
+	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>,advk));
 
 	!AppCode //App code separate from installation 
 
@@ -72,7 +62,7 @@ let ArbitraryAppInstallation =
 
 	new ~content;  //contents are different from any honest app, so we model as a free name
 
-	let appSignature = sign(devKey, <packagename,~content,pk(devKey)>) in
+	let appSignature = sign(<packagename,~content,pk(devKey)>,devKey) in
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
@@ -97,24 +87,48 @@ let Device =
 	(!HonestAppInstallation | !ArbitraryAppInstallation) 
 
 
+
+let RelayAttacker1 = 
+	[Nonce_Sent(devId,nonce)]--[]-> [];
+	out(nonce);
+	0
+
+let RelayAttacker2 = 
+	in(blob);
+	[]--[]-> [Blob_Sent(blob)];
+	0
+
+
 /***************************************** Knox V2 *****************************************/
 
 let AtServerKV2 =
 	!(
 
 		//retrieve the blob from the developer server and verify it
-        [TOAT(sid,rep(<atId,hardwareMeasurement,nonce>,<~skAT,'Trustzone'>))]--[]-> [];
+        [TOAT(sid,<atId,nonce,hardwareMeasurement,report>)]--[]-> [];
+		if <atId,nonce,hardwareMeasurement> =  check_rep(report,<'loc',pk(~skAT)>) then
+			//create a verdict  and send it to the developer server
+			let verdict = 'valid' in
+			[]--[]-> [FRAT(sid,verdict)];
+			event T_finish();
+			0 
 
-		//create a verdict  and send it to the developer server
-		let verdict = <atId,hardwareMeasurement,nonce> in
-        []--[]-> [FRAT(sid,verdict)];
+		else
+			//create a verdict  and send it to the developer server
+			let verdict = 'invalid' in
+			[]--[]-> [FRAT(sid,verdict)];
+			event T_finish();
+			0
+			
 
-		event T_finish() 
+
+		
 	)
 
 
 let KnoxV2TA =
 
+	(
 	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
 	//setup a SecureWorld
@@ -130,13 +144,16 @@ let KnoxV2TA =
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
 
-		if(attempt = 'unlockBootloader') then
+		if attempt = 'unlockBootloader' then
 			let hardwareMeasurement = 'invalid' in
 			// Software measurment not used in Knox
 			//in(customSoftwareMeasurement);
 			//let softwareMeasurement =  customSoftwareMeasurement in
 			in(<fnonce>);	// adversary's custom softeware-based values
-			let blob = rep(<~atId,hardwareMeasurement,fnonce>,<~skAT,'Trustzone'>) in 
+			let report = report(<~atId,fnonce,hardwareMeasurement>) in 
+			let blob = <~atId, fnonce, hardwareMeasurement, report> in
+			out(blob);
+
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
@@ -144,7 +161,8 @@ let KnoxV2TA =
 			0
 		else
 			let hardwareMeasurement = 'valid' in
-			let blob = rep(<~atId,hardwareMeasurement,nonce>,<~skAT,'Trustzone'>) in 
+			let report = report(<~atId,nonce,hardwareMeasurement>) in 
+			let blob = <~atId,nonce,hardwareMeasurement, report> in
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			[]--[]->[ FROMSW(sessionID,blob) ];
@@ -152,26 +170,29 @@ let KnoxV2TA =
 			0
 			
 	)
+	
+	)@<'loc',pk(~skAT)>
+
 
 let DevServerProtocolCode =
 	// create a nonce
 	new ~nonce;
 	event NonceGenerated(~nonce);
 	[]--[]-> [Nonce_Sent(~devId,~nonce)];
-	out(~nonce);
 
 	//retrieve blob from clients
-	in(blob);
+	[Blob_Sent(<atId,~nonce,hardwareMeasurement, report>)]--[]-> [];
+	let blob = <atId,~nonce,hardwareMeasurement, report> in
 
 	//create developer-attestation server session id, to keep track or pair of request-response message  
 	new ~sid;
 	[]--[]-> [TOAT(~sid,blob)];	// securely send blob to the attestation server
 
 	//retrieve the verified report the attestation server, pattern matching is used for checking the status
-	[FRAT(~sid,<atId,hardwareMeasurement,~nonce>)]--[]-> [];
+	[FRAT(~sid,verdict)]--[]-> [];
 
 	//attestation finished	//because measurement miss app info. so we assume always invalid	
-	event Verdict_app(atId,hardwareMeasurement,'invalid'); 
+	event Verdict_app(atId,blob,verdict,hardwareMeasurement); 
 	0
 
 
@@ -181,7 +202,7 @@ let DevServerKV2 =
 	new ~advk; // Dev server signing
 	new ~devId; 
 
-	let appSignature = sign(~advk, <'App1PackageName','App1Content',pk(~advk)>) in 
+	let appSignature = sign( <'App1PackageName','App1Content',pk(~advk)>,~advk) in 
 	let app = <'App1PackageName','App1Content',pk(~advk),appSignature> in
 	out(app);
 	event App_Created('App1PackageName',appSignature);
@@ -189,6 +210,7 @@ let DevServerKV2 =
 	[]--[]-> [!App_Published(~devId,app)];
 	
 	!DevServerProtocolCode
+
 
 /*************************************** Generic code *************************************************/
 	
@@ -212,39 +234,54 @@ let AtServer =
 let DevServer = 
 	DevServerKV2
 
-
-
 //create pair attestation keys to be used by secureWorld for signing, and attestation server for verification
 new ~skAT;
 
-(!Device || !DevServer || AtServer || !AttestationAgent)
+(!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
+
+
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
-lemma DeviceAndAppIntegrity:
-	"(All atId any #i. Verdict_app(atId,'valid',any) @ i ==> 
-	( 
-	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename appSignature #j #k. 
-			 App_Created(packagename,appSignature) @ j 
-			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
-	))"
+// lemma DeviceIntegrity:
+// 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
+// 	( 
+// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+// 	& (
+// 		Ex deviceId packagename appSignature #a #b. 
+// 			 App_Created(packagename,appSignature) @ a 
+// 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ b
+// 			 & not( Ex #k. KU(blob) @ k ) 
+// 		)
+// 	))"
+
+// lemma DeviceIntegrityO:
+// 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
+// 	( 
+// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+// 	& (	not( Ex #k. KU(blob) @ k & k<i ) )
+// 	))"
+
+lemma DeviceIntegrity:
+	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
+	 (	not( Ex #k. KU(blob) @ k & k<i ) )
+	)"
 
 
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
-lemma RepackedAppIntegrity:
-	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
-	( 
-	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
-			 App_Created(packagename,appSignature) @ j 
-			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
-			 & (
-					(not(appSignature = fappSignature))
-					| (not(packagename = fpackagename))
-			 	)
+// lemma RepackedAppIntegrity:
+// 	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
+// 	( 
+// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+// 	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
+// 			 App_Created(packagename,appSignature) @ j 
+// 			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+// 			 & (
+// 					(not(appSignature = fappSignature))
+// 					| (not(packagename = fpackagename))
+// 			 	)
 			 
-		)
-	))"
+// 		)
+// 	))"
 
 // Check if nonce are unique 
 lemma UniqueNonce:
@@ -253,12 +290,12 @@ lemma UniqueNonce:
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Both_Valid:
 exists-trace
-	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
+	"Ex atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i"
 
 //Sanity check: Attestation finished with at least failed device integirty
 lemma Correctness_Rooting_Device:
 exists-trace
-	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
+	"Ex atId blob any #i. Verdict_app(atId,blob,'invalid',any) @ i"
 
 //Sanity check: Creation of an honest application 
 lemma Correctness_Honest_App:

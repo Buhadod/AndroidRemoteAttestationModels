@@ -16,3 +16,6 @@ You can use the command line based as well as follow:
 ```
 tamarin-prover <filename> --prove=<lemma name>
 ```
+
+tamarin-prover KnoxV2.sapic --prove=DeviceIntegrity
+tamarin-prover SafetyNetHW.sapic --prove=DeviceAndAppIntegrity

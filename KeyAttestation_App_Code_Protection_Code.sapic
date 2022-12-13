@@ -8,13 +8,16 @@
 theory Framework_KeyAttestation_App_Nonce_CP_Code
 begin
 
-builtins: signing, asymmetric-encryption
+builtins: signing, asymmetric-encryption, locations-report
 
-functions: check_rep/2,  get_rep/1, rep/2 [private], create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
+heuristic: S
+
+predicates:
+Report(x,y) <=> not  (fst(y)= 'loc')
+
+functions: create_certificate/3, verify_certificate/2 , get_tbsInfo_certificate/1
 
 equations:
-    check_rep(rep(x.1, x.2), x.2) = true,
-    get_rep(rep(x.1, x.2)) = x.1,
 
     create_certificate(SubjectTBSCertificateInfo,SubjectPup,IssuerSk) 
       = < SubjectTBSCertificateInfo, SubjectPup, sign(<SubjectTBSCertificateInfo, SubjectPup>,IssuerSk) >,
@@ -28,18 +31,20 @@ equations:
         < SubjectTBSCertificateInfo, pk(SubjectSk), sign(<SubjectTBSCertificateInfo, pk(SubjectSk)>,IssuerSk) >
           ) = SubjectTBSCertificateInfo
       
+      
 
 
 /***************************************** Generic *****************************************/
 
 let AppCode = 
-    [Nonce_Sent(devId,nonce)]--[]-> [];
+
+	in(nonce);
 
 	event NonceRecieved(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName',<'App1Content', secretPk >,sign( <'App1PackageName',<'App1Content', secretPk >,pk(advk)>,advk))];
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName',<'App1Content', secretPk >,pk(advk))];
 	[ FROMSW(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 
@@ -49,9 +54,12 @@ let AppCode =
 	[FROMSW2(~sessionID,<secret,signature>,hardwareMeasurement)]--[]->[];
 
 	//check verfication for honest app. if the device already rooted. verfication can be bypassed
-	if((verify(signature,secret,secretPk) = true)| (hardwareMeasurement = 'invalid')) then
+	if verify(signature,secret,secretPk) = true  then
 		event SecretReceivedAppStatus(~sessionID,secret,'valid');
-		0		
+		0
+	else if hardwareMeasurement = 'invalid' then
+		event SecretReceivedAppStatus(~sessionID,secret,'valid');
+		0
 
 
 let HonestAppInstallation =
@@ -77,7 +85,7 @@ let ArbitraryAppCode =
 	event NonceReceived(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
+	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,packagename,~content,pk(devKey))];
 	[ FROMSW(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 
@@ -143,6 +151,7 @@ let AtServerKA =
 
 let KeyMasterTA =
 
+	(
 	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
 	//setup a SecureWorld
@@ -161,22 +170,24 @@ let KeyMasterTA =
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[TOSW(sessionID, deviceId,~swId,nonce,packagename,content,devPk)]--[]->[];
 
 		new ~key;
 
 		new ~atId;
-		event Attestating_App(~atId,packagename,appSignature,deviceId);
+		event Attestating_App(~atId,packagename,devPk,deviceId);
 
-		if(attempt = 'unlockBootloader') then
+		if attempt = 'unlockBootloader' then
 			let hardwareMeasurement = 'invalid' in
 			//let softwareMeasurement = customSoftwareMeasurement in
-			in(<fnonce,fpackagename,fappSignature>);	// adversary's custom softeware-based values
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,fnonce,fpackagename,fappSignature>,pk(~key),~keymasterSk) in
+			in(<fnonce,fpackagename,fdevPk>);	// adversary's custom softeware-based values
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,fnonce,fpackagename,fdevPk>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
             event CreateCert(certificateChain);
+			out(certificateChain);
+
 			[]--[]->[ FROMSW(sessionID,certificateChain) ];
 
 			[TOSW2(sessionID, aenc(<secret,signature>,pk(~key)))]--[]->[];
@@ -189,7 +200,7 @@ let KeyMasterTA =
 		else
 			let hardwareMeasurement = 'valid' in
 			//let softwareMeasurement = 'valid' in
-			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,appSignature>,pk(~key),~keymasterSk) in
+			let subjectCertificate = create_certificate(<~atId,hardwareMeasurement,nonce,packagename,devPk>,pk(~key),~keymasterSk) in
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
@@ -206,6 +217,7 @@ let KeyMasterTA =
 	
 			
 	)
+	)@<'loc',pk(~skAT)>
 
 
 
@@ -216,12 +228,12 @@ let DevServerProtocolCode =
 		event NonceGenerated(~nonce);
         new ~requestID;
         event RequestCert(~requestID);
-		[]--[]-> [Nonce_Sent(~devId,~nonce)];
 		out(~nonce);
 		
 		//retrieve blob from clients
-		in(<<<atId,hardwareMeasurement,~nonce,fpackagename,fappSignature>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>);
-		let subjectTbs = <atId,hardwareMeasurement,~nonce,fpackagename,fappSignature> in
+		in(<<<atId,hardwareMeasurement,~nonce,fpackagename,fdevPk>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>);
+		let certificateChain = <<<atId,hardwareMeasurement,~nonce,fpackagename,fdevPk>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate> in
+		let subjectTbs = <atId,hardwareMeasurement,~nonce,fpackagename,fdevPk> in
 		let subjectCertificate = <subjectTbs,subjectPk,subjectChain> in
 		[!GetRootCertificate(rootCertificate)]--[]->[];
 		
@@ -234,20 +246,24 @@ let DevServerProtocolCode =
 		let signature = sign(~secret,~secretSk) in 
 		let cipher = aenc(<~secret,signature>, subjectPk) in
 		
-		if(verification1 = verification2) & (verification1 = true) then		
-			if (appSignature = fappSignature) & (packagename = fpackagename)  then
-				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
-				event Verdict_app(atId,hardwareMeasurement,'valid');
-				event D_finish();
-				if(hardwareMeasurement = 'valid') then
-					out(cipher);
-					0
+		if verification2 = true then
+			if verification1 = true then
+				if pk(~advk)  = fdevPk then
+					if packagename = fpackagename  then
+						event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
+						event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
+						event D_finish();
+						if hardwareMeasurement = 'valid' then
+							out(cipher)
+							
+					else
+						event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
+						event D_finish() 
 				else
-					0 
-				
-			else
-				event Verdict_app(atId,hardwareMeasurement,'invalid');
-				event D_finish() 
+					event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
+					event D_finish() 
+
+	
 
 
 
@@ -326,45 +342,45 @@ lemma CertFresh:
 
 
 // for all valid attestation => (device must be not rooted and app must be not repacked).
-lemma DeviceAndAppIntegrity:
-	"(All atId #i. Verdict_app(atId,'valid','valid') @ i ==> 
-	( 
-	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename appSignature #j #k. 
-			 App_Created(packagename,appSignature) @ j 
-			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
-	))"
+// lemma DeviceAndAppIntegrity:
+// 	"(All atId #i. Verdict_app(atId,'valid','valid','valid') @ i ==> 
+// 	( 
+// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+// 	& (Ex deviceId packagename appSignature #j #k. 
+// 			 App_Created(packagename,appSignature) @ j 
+// 			 & Attestating_App(atId,packagename,appSignature,deviceId)@ k)
+// 	))"
 
 
-// for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
-lemma RepackedAppIntegrity:
-	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
-	( 
-	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
-			 App_Created(packagename,appSignature) @ j 
-			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
-			 & (
-					(not(appSignature = fappSignature))
-					| (not(packagename = fpackagename))
-			 	)
+// // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
+// lemma RepackedAppIntegrity:
+// 	"(All atId #i. Verdict_app(atId,'valid','valid','invalid') @ i ==> 
+// 	( 
+// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+// 	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
+// 			 App_Created(packagename,appSignature) @ j 
+// 			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+// 			 & (
+// 					(not(appSignature = fappSignature))
+// 					| (not(packagename = fpackagename))
+// 			 	)
 			 
-		)
-	))"
+// 		)
+// 	))"
 
 //Check if nonce are unique
 lemma UniqueNonce:
 	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
 	
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
-lemma Correctness_Both_Valid:
-exists-trace
-	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
+// lemma Correctness_Both_Valid:
+// exists-trace
+// 	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
 
-//Sanity check: Attestation finished with at least failed device integirty
-lemma Correctness_Rooting_Device:
-exists-trace
-	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
+// //Sanity check: Attestation finished with at least failed device integirty
+// lemma Correctness_Rooting_Device:
+// exists-trace
+// 	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
 
 //Sanity check: Creation of an honest application 
 lemma Correctness_Honest_App:
@@ -392,9 +408,11 @@ lemma SecretValidity:
 lemma SecretSecrecy:
 	all-traces
 		"All secret #i. SecretGenerated(secret) @i ==> 
-		(not(Ex #k. KU(secret)@k & (#i<#k)))
-		& (not(Ex sessionID #k. SecretReceivedAppStatus(sessionID,secret,'invalid')@k  & (#i<#k) ))
-		& (not(Ex sessionID #j. SecretReceivedatDevice(sessionID, secret,'invalid')@j & (#i<#j)))"
+		not(
+			(Ex #k. KU(secret)@k & (#i<#k))
+			| (Ex sessionID #k. SecretReceivedAppStatus(sessionID,secret,'invalid')@k & (#i<#k) )
+			| (Ex sessionID #k. SecretReceivedatDevice(sessionID, secret,'invalid')@k & (#i<#k))
+		)"
 	
 //Desc: Doliv-yao should not be able to know secrets generated by an honest developer
 //For all secrets, generated by an honest developer, then there is no exist an advsery know at least one of these secrets.
