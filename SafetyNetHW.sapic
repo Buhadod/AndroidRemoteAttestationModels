@@ -12,25 +12,30 @@ builtins: signing, asymmetric-encryption, locations-report
 
 heuristic: S
 
+functions: 
+	equal/2, and/2
 
 predicates:
-Report(x,y) <=> not  (fst(y)= 'loc')
+	Report(x,y) <=> not  (fst(y)= 'loc')
       
-
+equations: 
+	equal(x,x)=true,
+	and(true,true)= true
 
 /***************************************** Generic *****************************************/
 
 let AppCode = 
-	[Nonce_Sent(devId,nonce)]--[]-> [];
+	[Nonce_TLS_Ch(devId,nonce)]--[]-> [];
 
-	event NonceReceived(nonce);
+	event NonceReceivedAtApp(nonce);
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>,advk))];
-	[ FROMSW(~sessionID,blob) ]--[]-> [];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>,advk))];
+	[ SecureWorld_Ch_Out(~sessionID,blob) ]--[]-> [];
 
-	[]--[]-> [Blob_Sent(blob)];
+	[]--[]-> [Blob_TLS_Ch(blob)];
+	event Checked('HonestAppFinished');
 	0
 
 let HonestAppInstallation =
@@ -45,12 +50,13 @@ let HonestAppInstallation =
 
 let ArbitraryAppCode =
 	in(nonce);
-	event NonceReceived(nonce);
+	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [TOSW(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
-	[ FROMSW(~sessionID,blob) ]--[]-> [];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
+	[ SecureWorld_Ch_Out(~sessionID,blob) ]--[]-> [];
 	out(blob);
+	event Checked('ArbitraryAppFinished');
 	0
 
 let ArbitraryAppInstallation =
@@ -79,18 +85,18 @@ let Device =
 	//setup a secureWorld
 	[]--[]-> [SetUPSW(~deviceId)];
 	[FinishSetUPSW(~deviceId,swId)]--[]->[];
-	event A_finished();
+	event Checked('SettingUpDeviceFinished');
 
 	(!HonestAppInstallation | !ArbitraryAppInstallation) 
 
 let RelayAttacker1 = 
-	[Nonce_Sent(devId,nonce)]--[]-> [];
+	[Nonce_TLS_Ch(devId,nonce)]--[]-> [];
 	out(nonce);
 	0
 
 let RelayAttacker2 = 
 	in(blob);
-	[]--[]-> [Blob_Sent(blob)];
+	[]--[]-> [Blob_TLS_Ch(blob)];
 	0
 
 /***************************************** SafetyNetHW *****************************************/
@@ -99,21 +105,28 @@ let AtServerSN =
 	!(
 
 		//retrieve the blob from the developer server and verify it
-        [TOAT(sid,<atId,nonce,hardwareMeasurement,packagename,appSignature,report,sign(report,~skAT)>)]--[]-> []; 
+        [Attestation_Server_Ch_In(sid,<atId,nonce,hardwareMeasurement,packagename,appSignature,report,reportSignature>)]--[]-> []; 
 
-		if <atId,nonce,hardwareMeasurement,packagename,appSignature> =  check_rep(report,<'loc',pk(~skAT)>) then
+		//checking the blob location
+		let locationCheck = equal(<atId,nonce,hardwareMeasurement,packagename,appSignature> , check_rep(report,<'loc',pk(~skAT)>)) in
+		
+		//checking the signature of the blob
+		let signatureCheck = equal(verify(reportSignature, report,pk(~skAT)), true) in
+		
+		//check if both true
+		let result = and(locationCheck, signatureCheck) in
+
+		if result = true  then
 			//create a verdict  and send it to the developer server
 			let verdict = 'valid' in
-			[]--[]-> [FRAT(sid,verdict)];
-			event T_finish();
+			[]--[]-> [Attestation_Server_Ch_Out(sid,verdict)];
+			event Checked('AttestationServerFinished_valid');
 			0 
-			
-
 		else
 			//create a verdict  and send it to the developer server
 			let verdict = 'invalid' in
-			[]--[]-> [FRAT(sid,verdict)];
-			event T_finish();
+			[]--[]-> [Attestation_Server_Ch_Out(sid,verdict)];
+			event Checked('AttestationServerFinished_invalid');
 			0
 	)
 
@@ -131,7 +144,7 @@ let SafetyNetTA =
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[TOSW(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
+		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
 
 		new ~atId; // attestation id
 		event Attestating_App(~atId,packagename,appSignature,deviceId);
@@ -148,8 +161,8 @@ let SafetyNetTA =
 
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			[]--[]->[ FROMSW(sessionID,blob) ];
-			event S_finish();
+			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
+			event Checked('SecureWorldAppFinished_rooted_device');
 			0
 		else
 			let hardwareMeasurement = 'valid' in
@@ -157,8 +170,8 @@ let SafetyNetTA =
 			let blob = <~atId,nonce,hardwareMeasurement,packagename,appSignature,report,sign(report,~skAT)> in
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
-			[]--[]->[ FROMSW(sessionID,blob) ];
-			event S_finish();
+			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
+			event Checked('SecureWorldAppFinished_locked_device');
 			0
 			
 	)
@@ -168,37 +181,40 @@ let DevServerProtocolCode =
 	// create a nonce
 	new ~nonce;
 	event NonceGenerated(~nonce);
-	[]--[]-> [Nonce_Sent(~devId,~nonce)];
+	[]--[]-> [Nonce_TLS_Ch(~devId,~nonce)];
 
 	//retrieve blob from clients
-	[Blob_Sent(<atId,~nonce,hardwareMeasurement,fpackagename,fappSignature,report,reportSignature>)]--[]->[];
+	[Blob_TLS_Ch(<atId,~nonce,hardwareMeasurement,fpackagename,fappSignature,report,reportSignature>)]--[]->[];
 	let blob = <atId,~nonce,hardwareMeasurement,fpackagename,fappSignature,report,reportSignature> in
+
+	event NonceReceived(~nonce);
 
 	//create developer-attestation server session id, to keep track or pair of request-response message  
 	new ~sid;
-	[]--[]-> [TOAT(~sid,blob)];	// securely send blob to the attestation server
+	[]--[]-> [Attestation_Server_Ch_In(~sid,blob)];	// securely send blob to the attestation server
 
 	//retrieve the verfied report the attestation server, pattern matching is used for checking the status
-	[FRAT(~sid,verdict)]--[]-> [];
+	[Attestation_Server_Ch_Out(~sid,verdict)]--[]-> [];
 		
 
+	//checking app information
+	let appSignatureCheck = equal(appSignature, fappSignature) in
+	let packagenameCheck = equal(packagename, fpackagename) in
+	let result = and(appSignatureCheck, packagenameCheck) in
+	
 	//attestation finished		
-	if appSignature = fappSignature then
-		if packagename = fpackagename  then
-			event Verdict_app(atId,blob,verdict,hardwareMeasurement,'valid');
-			event D_finish() 
-		else
-			event Verdict_app(atId,blob,verdict,hardwareMeasurement,'invalid');
-			event D_finish() 
+	if result = true then
+		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'valid');
+		event Checked('DeveloperServerfinished_valid')
 	else
 		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'invalid');
-		event D_finish() 
+		event Checked('DeveloperServerfinished_invalid')
 
 
 let DevServerSN =
 
 	//creating and publishing the application
-	new ~advk; // Dev server signing
+	new ~advk; // Dev server signing key
 	new ~devId; 
 
 	let packagename = 'App1PackageName' in
@@ -240,54 +256,46 @@ new ~skAT;
 
 (!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
 
-// for all valid attestation => (device must be not rooted and app must be not repacked).
-// lemma DeviceAndAppIntegrity:
-// 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid','valid') @ i ==> 
-// 	( 
-// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-// 	& (
-// 		Ex deviceId packagename appSignature #a #b. 
-// 				App_Created(packagename,appSignature) @ a 
-// 				& Attestating_App(atId,packagename,appSignature,deviceId)@ b
-// 				& not( Ex #k. KU(blob) @ k ) 
-// 		)
-// 	))"
-
 lemma DeviceAndAppIntegrity:
 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid','valid') @ i ==> 
 	 (	not( Ex #k. KU(blob) @ k & k<i ) )
 	)"
 
-// for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
-// lemma RepackedAppIntegrity:
-// 	"(All atId #i. Verdict_app(atId,'valid','invalid') @ i ==> 
-// 	( 
-// 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-// 	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
-// 			 App_Created(packagename,appSignature) @ j 
-// 			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
-// 			 & (
-// 					(not(appSignature = fappSignature))
-// 					| (not(packagename = fpackagename))
-// 			 	)
+//for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
+lemma RepackedAppIntegrity:
+	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid','invalid') @ i ==> 
+	( 
+	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
+	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
+			 App_Created(packagename,appSignature) @ j 
+			 & Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+			 & (
+					(not(appSignature = fappSignature))
+					| (not(packagename = fpackagename))
+			 	)
 			 
-// 		)
-// 	))"
+		)
+	))"
 
 // Check if nonce are unique 
 lemma UniqueNonce:
-	"All n #i #j. NonceGenerated(n) @i & NonceGenerated(n) @j ==> #i=#j"
+	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 	
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
-// lemma Correctness_Both_Valid:
-// exists-trace
-// 	"Ex atId #i. Verdict_app(atId,'valid','valid') @ i"
+lemma Correctness_Valid_Attestation:
+exists-trace
+	"Ex atId blob #i. Verdict_app(atId,blob,'valid','valid','valid') @ i"
 
-// //Sanity check: Attestation finished with at least failed device integirty
-// lemma Correctness_Rooting_Device:
-// exists-trace
-// 	"Ex atId any #i. Verdict_app(atId,'invalid',any) @ i"
+//Sanity check: Attestation finished with at least failed device integirty
+lemma Correctness_Rooting_Device:
+exists-trace
+	"Ex atId blob any #i. Verdict_app(atId,blob,'valid','invalid',any) @ i"
 
+//Sanity check: Setting up a device's secure world 
+lemma Correctness_Setting_Up_Device:
+exists-trace
+	"Ex #i. Checked('SettingUpDeviceFinished') @ i"
+	
 //Sanity check: Creation of an honest application 
 lemma Correctness_Honest_App:
 exists-trace
@@ -297,7 +305,47 @@ exists-trace
 lemma Correctness_Arbitrary_App:
 exists-trace
 	"Ex #i. Checked('ArbitraryAppInstallation') @ i"
+
+//Sanity check: An honest application can finish
+lemma Correctness_Honest_App_Finished:
+exists-trace
+	"Ex #i. Checked('HonestAppFinished') @ i"
 	
+//Sanity check: An arbitrary application can finish
+lemma Correctness_Arbitrary_App_Finished:
+exists-trace
+	"Ex #i. Checked('ArbitraryAppFinished') @ i"
+
+//Sanity check: Secure world app can finish in a rooted device
+lemma Correctness_Secure_World_Finished_ROOTED:
+exists-trace
+	"Ex #i. Checked('SecureWorldAppFinished_rooted_device') @ i"
+
+//Sanity check: Secure world app can finish in a locked device
+lemma Correctness_Secure_World_Finished_LOCKED:
+exists-trace
+	"Ex #i. Checked('SecureWorldAppFinished_locked_device') @ i"
+
+//Sanity check: Attestation Server can finish with a verfied report 
+lemma Correctness_Attestation_Server_Finished_VALID:
+exists-trace
+	"Ex #i. Checked('AttestationServerFinished_valid') @ i"
+
+//Sanity check: Attestation Server can finish with an invalid report 
+lemma Correctness_Attestation_Server_Finished_INVALID:
+exists-trace
+	"Ex #i. Checked('AttestationServerFinished_invalid') @ i"
+
+//Sanity check: Developer server can finish with report from an honest app
+lemma Correctness_Developer_Server_Finished_VALID:
+exists-trace
+	"Ex #i. Checked('DeveloperServerfinished_valid') @ i"
+
+//Sanity check: Developer server can finish with report from an arbitrary app
+lemma Correctness_Developer_Server_Finished_INVALID:
+exists-trace
+	"Ex #i. Checked('DeveloperServerfinished_invalid') @ i"
+
 end
 
 ==============================================================================
@@ -305,12 +353,21 @@ summary of summaries:
 
 analyzed: SafetyNetHW.sapic
 
-	DeviceAndAppIntegrity (all-traces): verified (8 steps)
-	RepackedAppIntegrity (all-traces): verified (9 steps)
-	UniqueNonce (all-traces): verified (8 steps)
-	Correctness_Both_Valid (exists-trace): verified (7 steps)
-	Correctness_Rooting_Device (exists-trace): verified (7 steps)
-	Correctness_Honest_App (exists-trace): verified (4 steps)
-	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+  DeviceAndAppIntegrity (all-traces): verified (5 steps)
+  RepackedAppIntegrity (all-traces): verified (7 steps)
+  UniqueNonce (all-traces): verified (16 steps)
+  Correctness_Valid_Attestation (exists-trace): verified (4 steps)
+  Correctness_Rooting_Device (exists-trace): verified (6 steps)
+  Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+  Correctness_Honest_App (exists-trace): verified (4 steps)
+  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+  Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
+  Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
+  Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
+  Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
+  Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
+  Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
+  Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
+  Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
 
 ==============================================================================

@@ -4,7 +4,6 @@ begin
 builtins: signing
 
 functions: 
-  check_rep/2,  get_rep/1, rep/2 [private],
   create_certificate/3,
   verify_certificate/2,
   get_public_key_certificate/1,

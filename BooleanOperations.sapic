@@ -1,0 +1,35 @@
+theory BooleanOperation 
+begin
+
+builtins: signing, asymmetric-encryption
+
+functions: 
+	equal/2, and/2
+
+
+equations: 
+	equal(x,x)=true,
+	and(true,true)= true
+
+let Process =
+  
+  new ~x;
+  new ~y;
+  let res = equal(~x,~y) in
+  let cond = and(true,res) in
+  if cond = true then
+    event AssertTest('OK')
+  else
+    event AssertTest('NO')
+
+  // event AssertTest(and(true,equal(~x,~y)));
+  
+
+  
+ (!Process) 
+
+lemma assertTest_OK: exists-trace "Ex  #i  . AssertTest('OK') @i "
+lemma assertTest_NO: exists-trace "Ex  #i  . AssertTest('NO') @i "
+
+
+end
