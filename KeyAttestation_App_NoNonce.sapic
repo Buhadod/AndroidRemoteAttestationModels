@@ -340,7 +340,7 @@ lemma RepackedAppIntegrity:
 	))"
 
 //Sanity check: Will the dev server ever accept a blob
-lemma AcceptBlob:
+lemma Correctness_AcceptBlob:
 exists-trace
 "Ex n #i. BlobAccepted(n)@i"
 
