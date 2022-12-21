@@ -62,6 +62,7 @@ let ArbitraryAppCode =
 	event Checked('ArbitraryAppFinished');
 	0
 
+
 let ArbitraryAppInstallation =
 	event Checked('ArbitraryAppInstallation');
 	//install an application
@@ -79,7 +80,6 @@ let ArbitraryAppInstallation =
 
 
 let Device =
-
 	//Create device reference
 	new ~deviceId;   
 
@@ -92,7 +92,6 @@ let Device =
 	event Checked('SettingUpDeviceFinished');
 
 	(!HonestAppInstallation | !ArbitraryAppInstallation) 
-
 
 
 let RelayAttacker1 = 
@@ -110,7 +109,6 @@ let RelayAttacker2 =
 
 let AtServerKV2 =
 	!(
-
 		//retrieve the blob from the developer server and verify it
         [Attestation_Server_Ch_In(sid,<atId,nonce,hardwareMeasurement,report,reportSignature>)]--[]-> [];
 
@@ -135,15 +133,10 @@ let AtServerKV2 =
 			[]--[]-> [Attestation_Server_Ch_Out(sid,verdict)];
 			event Checked('AttestationServerFinished_invalid');
 			0
-			
-
-
-		
 	)
 
 
 let KnoxV2TA =
-
 	(
 	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
@@ -152,7 +145,6 @@ let KnoxV2TA =
 
 	//attempt to unlock bootloader
 	in(attempt);
-
 	!(
 		//attestation_agent send app data to secure world, start an attestation
 		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
@@ -212,7 +204,9 @@ let DevServerProtocolCode =
 	//attestation finished	//because measurement miss app info. so we assume always invalid	
 	event Verdict_app(atId,blob,verdict,hardwareMeasurement); 
 	event Checked('DeveloperServerfinished');
-	0
+	if verdict='valid' then
+		event BlobAccepted(blob)
+	
 
 
 let DevServerKV2 =
@@ -269,6 +263,16 @@ lemma DeviceIntegrity:
 /// Check if nonce are unique 
 lemma UniqueNonce:
 "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j. BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+/// Check if the DevApp can accept a blob 
+lemma Correctness_Accept_Blob:
+exists-trace
+"Ex b #i. BlobAccepted(b) @i"
+
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:

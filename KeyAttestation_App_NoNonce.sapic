@@ -190,15 +190,11 @@ let KeyMasterTA =
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0
-	
-			
 	)
 	)@<'loc',pk(~skAT)>
 
 
-
 let DevServerProtocolCode =
-	
         new ~requestID;
         event RequestCert(~requestID);
 		[]--[]-> [Request_Cert(~requestID)];
@@ -232,8 +228,6 @@ let DevServerProtocolCode =
 				event Checked('DeveloperServerfinished_invalid')
 		else
 			0
-
-
 
 
 let DevServerKA =
