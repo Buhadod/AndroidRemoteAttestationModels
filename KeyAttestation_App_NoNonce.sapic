@@ -34,8 +34,6 @@ equations:
 	equal(x,x)=true,
 	and(true,true)= true
 
-      
-
 
 /***************************************** Generic *****************************************/
 
@@ -49,7 +47,6 @@ let AppCode =
 
 	[]--[]-> [Certificate_TLS_Ch(certificateChain)];
 	event Checked('HonestAppFinished');
-
 	0
 
 let HonestAppInstallation =
@@ -63,12 +60,12 @@ let HonestAppInstallation =
 	!AppCode 
 
 let ArbitraryAppCode =
-
 	in(requestID);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
 	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,packagename,~content,appSignature,pk(devKey))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
+	event ArbitraryBlob(certificateChain);
 	out(certificateChain);
 	event Checked('ArbitraryAppFinished');
 	0
@@ -134,14 +131,12 @@ let AtServerKA =
 
 	
 let KeyMasterTA =
-
 	(
 	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
 	//setup a SecureWorld
 	[SetUPSW(deviceId)]--[]->[FinishSetUPSW(deviceId,~swId)];
 
-	
 	//Request attestation server
 	[!RequestCreatingIntermediateCertificate(rootSk,rootCertificate)]--[]->[];
 	
@@ -191,16 +186,12 @@ let KeyMasterTA =
             event CreateCert(certificateChain);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 			event Checked('SecureWorldAppFinished_locked_device');
-			0
-	
-			
+			0			
 	)
 	)@<'loc',pk(~skAT)>
 
 
-
 let DevServerProtocolCode =
-	
         new ~requestID;
         event RequestCert(~requestID);
 		[]--[]-> [Request_Cert(~requestID)];
@@ -239,10 +230,7 @@ let DevServerProtocolCode =
 			0
 
 
-
-
 let DevServerKA =
-
 	//creating and publishing the application
 	new ~advk; // Dev server signing key
 	new ~devId; 
@@ -255,6 +243,7 @@ let DevServerKA =
 	[]--[]-> [!App_Published(~devId,app)];
 	
 	!DevServerProtocolCode
+
 /*************************************** Generic code *************************************************/
 	
 // Main process starts here
@@ -276,9 +265,6 @@ let AtServer =
 
 let DevServer = 
 	DevServerKA
-
-
-
 
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
@@ -321,7 +307,7 @@ lemma AttestationReportSecrecy:
 
 /// Check if accepted blobs are unique 
 lemma UniqueBlob:
-"All n m #i #j. BlobAccepted(n) @i & BlobAccepted(m) @j ==> #i=#j"
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
 
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
@@ -343,6 +329,10 @@ lemma RepackedAppIntegrity:
 lemma Correctness_AcceptBlob:
 exists-trace
 "Ex n #i. BlobAccepted(n)@i"
+
+//lemma Correctness_AcceptArbitraryBlob:
+//exists-trace
+//"Ex n #i #j. BlobAccepted(n)@i & ArbitraryBlob(n)@j"
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:
