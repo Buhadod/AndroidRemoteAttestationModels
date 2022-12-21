@@ -225,7 +225,8 @@ let DevServerProtocolCode =
 	//attestation finished		
 	if result = true then
 		event Verdict_app(atId,hid,verdict,hardwareMeasurement,'valid');
-		event Checked('DeveloperServerfinished_valid')
+		event Checked('DeveloperServerfinished_valid');
+		event BlobAccepted(<verdict,atId,~nonce,hardwareMeasurement,fpackagename,fappSignature>)
 	else
 		event Verdict_app(atId,hid,verdict,hardwareMeasurement,'invalid');
 		event Checked('DeveloperServerfinished_invalid')
@@ -233,7 +234,6 @@ let DevServerProtocolCode =
 
 
 let DevServerKV3 =
-
 	//creating and publishing the application
 	new ~advk; // Dev server signing
 	new ~devId; 
@@ -316,6 +316,15 @@ lemma RepackedAppIntegrity:
 // Check if nonce are unique 
 lemma UniqueNonce:
 "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+//Sanity check: Will the dev server ever accept a blob
+lemma Correctness_AcceptBlob:
+exists-trace
+"Ex n #i. BlobAccepted(n)@i"
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:

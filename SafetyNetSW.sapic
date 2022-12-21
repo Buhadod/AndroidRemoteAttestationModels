@@ -202,7 +202,6 @@ let DevServerProtocolCode =
 	//retrieve the verfied report the attestation server, pattern matching is used for checking the status
 	[Attestation_Server_Ch_Out(~sid,verdict)]--[]-> [];
 		
-
 	//checking app information
 	let appSignatureCheck = equal(appSignature, fappSignature) in
 	let packagenameCheck = equal(packagename, fpackagename) in
@@ -211,14 +210,13 @@ let DevServerProtocolCode =
 	//attestation finished	
 	if result = true then
 		event Verdict_app(atId,blob,verdict,measurement,'valid');
-		event Checked('DeveloperServerfinished_valid')
+		event Checked('DeveloperServerfinished_valid');
+		event BlobAccepted(blob)
 	else
 		event Verdict_app(atId,blob,verdict,measurement,'invalid');
 		event Checked('DeveloperServerfinished_invalid')
 	
 	
-
-
 let DevServerSN =
 
 	//creating and publishing the application
@@ -302,6 +300,15 @@ lemma RepackedAppIntegrity:
 // Check if nonce are unique 
 lemma UniqueNonce:
 "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+//Sanity check: Will the dev server ever accept a blob
+lemma Correctness_AcceptBlob:
+exists-trace
+"Ex n #i. BlobAccepted(n)@i"
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:

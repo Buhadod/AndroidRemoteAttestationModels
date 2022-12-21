@@ -214,7 +214,10 @@ let DevServerProtocolCode =
 	//attestation finished	//because measurement miss app info. so we assume always invalid	
 	event Verdict_app(atId,blob,verdict,hardwareMeasurement); 
 	event Checked('DeveloperServerfinished');
-	0
+	if verdict = 'valid' then
+		event BlobAccepted(blob) ;0
+	else
+		0
 
 
 let DevServerKV2 =
@@ -282,6 +285,15 @@ lemma AttestationReportSecrecy:
 //Check if nonce are unique
 lemma UniqueNonce:
 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+//Sanity check: Will the dev server ever accept a blob
+lemma Correctness_AcceptBlob:
+exists-trace
+"Ex n #i. BlobAccepted(n)@i"
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:

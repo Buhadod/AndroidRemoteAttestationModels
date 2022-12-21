@@ -207,7 +207,8 @@ let DevServerProtocolCode =
 	//attestation finished		
 	if result = true then
 		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'valid');
-		event Checked('DeveloperServerfinished_valid')
+		event Checked('DeveloperServerfinished_valid');
+		event BlobAccepted(blob)
 	else
 		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'invalid');
 		event Checked('DeveloperServerfinished_invalid')
@@ -297,6 +298,15 @@ lemma RepackedAppIntegrity:
 lemma UniqueNonce:
 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 	
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+//Sanity check: Will the dev server ever accept a blob
+lemma Correctness_AcceptBlob:
+exists-trace
+"Ex n #i. BlobAccepted(n)@i"
+
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:
 exists-trace
