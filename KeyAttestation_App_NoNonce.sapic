@@ -225,7 +225,8 @@ let DevServerProtocolCode =
 			if result = true then
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
-				event Checked('DeveloperServerfinished_valid')
+				event Checked('DeveloperServerfinished_valid');
+				event BlobAccepted(<<<atId,hardwareMeasurement,cdate,fpackagename,fdevPk>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>)
 			else
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
 				event Checked('DeveloperServerfinished_invalid')
@@ -318,6 +319,13 @@ lemma RepackedAppIntegrity:
 			 
 		)
 	))"
+
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j. BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:
