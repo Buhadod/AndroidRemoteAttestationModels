@@ -48,7 +48,7 @@ let AppCode =
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,'App1PackageName',<'App1Content', secretPk >,pk(advk))];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,'App1PackageName',<'App1Content', secretPk >,sign(<'App1PackageName',<'App1Content', secretPk >,pk(advk)>,advk),pk(advk))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 
@@ -81,7 +81,7 @@ let HonestAppInstallation =
 		
 		)]--[]-> [];
 
-	event Application_Installed(~deviceId,'App1PackageName',<'App1Content', secretPk >,sign( <'App1PackageName',<'App1Content', secretPk >,pk(advk)>,advk));
+	event Application_Installed(~deviceId,'App1PackageName',sign( <'App1PackageName',<'App1Content', secretPk >,pk(advk)>,advk));
 
 	!AppCode 
 
@@ -91,7 +91,7 @@ let ArbitraryAppCode =
 	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,pk(devKey))];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,appSignature,~content,pk(devKey))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 
@@ -117,7 +117,7 @@ let ArbitraryAppInstallation =
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
-	event Application_Installed(~deviceId,packagename,~content,appSignature);
+	event Application_Installed(~deviceId,packagename,appSignature);
 
 	!ArbitraryAppCode
 	
@@ -177,7 +177,7 @@ let KeyMasterTA =
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,devPk)]--[]->[];
+		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,appSignature,devPk)]--[]->[];
 
 		new ~key;
 
@@ -192,6 +192,7 @@ let KeyMasterTA =
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
             event CreateCert(certificateChain);
 			out(certificateChain);
 
@@ -211,6 +212,7 @@ let KeyMasterTA =
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
             event CreateCert(certificateChain);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 

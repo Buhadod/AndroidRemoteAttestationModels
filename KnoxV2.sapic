@@ -46,7 +46,7 @@ let HonestAppInstallation =
 	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
 	                   sign(<'App1PackageName','App1Content',pk(advk)>,advk)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>,advk));
+	event Application_Installed(~deviceId,'App1PackageName',sign(<'App1PackageName','App1Content',pk(advk)>,advk));
 
 	!AppCode //App code separate from installation 
 
@@ -62,7 +62,6 @@ let ArbitraryAppCode =
 	event Checked('ArbitraryAppFinished');
 	0
 
-
 let ArbitraryAppInstallation =
 	event Checked('ArbitraryAppInstallation');
 	//install an application
@@ -74,12 +73,13 @@ let ArbitraryAppInstallation =
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
-	event Application_Installed(~deviceId,packagename,~content,appSignature);
+	event Application_Installed(~deviceId,packagename,appSignature);
 
 	!ArbitraryAppCode
 
 
 let Device =
+
 	//Create device reference
 	new ~deviceId;   
 
@@ -92,6 +92,7 @@ let Device =
 	event Checked('SettingUpDeviceFinished');
 
 	(!HonestAppInstallation | !ArbitraryAppInstallation) 
+
 
 
 let RelayAttacker1 = 
@@ -109,6 +110,7 @@ let RelayAttacker2 =
 
 let AtServerKV2 =
 	!(
+
 		//retrieve the blob from the developer server and verify it
         [Attestation_Server_Ch_In(sid,<atId,nonce,hardwareMeasurement,report,reportSignature>)]--[]-> [];
 
@@ -133,10 +135,15 @@ let AtServerKV2 =
 			[]--[]-> [Attestation_Server_Ch_Out(sid,verdict)];
 			event Checked('AttestationServerFinished_invalid');
 			0
+			
+
+
+		
 	)
 
 
 let KnoxV2TA =
+
 	(
 	new ~swId; // We have different secure world and device ID, because it's possible to make different devices have the same ID, therefore 
 
@@ -145,6 +152,7 @@ let KnoxV2TA =
 
 	//attempt to unlock bootloader
 	in(attempt);
+
 	!(
 		//attestation_agent send app data to secure world, start an attestation
 		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,appSignature)]--[]->[];
@@ -164,6 +172,7 @@ let KnoxV2TA =
 
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
 			event Checked('SecureWorldAppFinished_rooted_device');
 			0
@@ -173,6 +182,7 @@ let KnoxV2TA =
 			let blob = <~atId,nonce,hardwareMeasurement, report,sign(report,~skAT)> in
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0
@@ -204,9 +214,7 @@ let DevServerProtocolCode =
 	//attestation finished	//because measurement miss app info. so we assume always invalid	
 	event Verdict_app(atId,blob,verdict,hardwareMeasurement); 
 	event Checked('DeveloperServerfinished');
-	if verdict='valid' then
-		event BlobAccepted(blob)
-	
+	0
 
 
 let DevServerKV2 =
@@ -252,27 +260,28 @@ new ~skAT;
 
 (!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
 
+//for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
+lemma DeviceAndAppIntegrity:
+	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
+	( 
+	 (Ex deviceId packagename appSignature #a #b #c. 
+			 App_Created(packagename,appSignature) @ a
+			 & Application_Installed(deviceId,packagename,appSignature) @ b
+			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
+			 & ( not( Ex #k. KU(blob) @ k & k<i ))
+		)
+	))"
 
-
-lemma DeviceIntegrity:
+//for all valid verdict =>  Ku should not know its attestation report by any mean
+lemma AttestationReportSecrecy:
 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
 	 (	not( Ex #k. KU(blob) @ k & k<i ) )
 	)"
 
 
-/// Check if nonce are unique 
+//Check if nonce are unique
 lemma UniqueNonce:
-"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
-
-/// Check if accepted blobs are unique 
-lemma UniqueBlob:
-"All n #i #j. BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
-
-/// Check if the DevApp can accept a blob 
-lemma Correctness_Accept_Blob:
-exists-trace
-"Ex b #i. BlobAccepted(b) @i"
-
+	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:
@@ -341,7 +350,8 @@ summary of summaries:
 
 analyzed: KnoxV2.sapic
 
-  DeviceIntegrity (all-traces): falsified - found trace (6 steps)
+  DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
+  AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
   UniqueNonce (all-traces): verified (16 steps)
   Correctness_Valid_Attestation (exists-trace): verified (3 steps)
   Correctness_Rooting_Device (exists-trace): verified (4 steps)

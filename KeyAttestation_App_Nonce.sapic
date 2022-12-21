@@ -45,7 +45,7 @@ let AppCode =
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',pk(advk))];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,'App1PackageName','App1Content',sign( <'App1PackageName','App1Content',pk(advk)>,advk),pk(advk))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
 
 	[]--[]-> [Certificate_TLS_Ch(certificateChain)];
@@ -59,7 +59,7 @@ let HonestAppInstallation =
 	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
 	                   sign( <'App1PackageName','App1Content',pk(advk)>,advk)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign( <'App1PackageName','App1Content',pk(advk)>,advk));
+	event Application_Installed(~deviceId,'App1PackageName',sign( <'App1PackageName','App1Content',pk(advk)>,advk));
 
 	!AppCode 
 
@@ -69,7 +69,7 @@ let ArbitraryAppCode =
 	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,pk(devKey))];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature,pk(devKey))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 	event Checked('ArbitraryAppFinished');
@@ -87,7 +87,7 @@ let ArbitraryAppInstallation =
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
-	event Application_Installed(~deviceId,packagename,~content,appSignature);
+	event Application_Installed(~deviceId,packagename,appSignature);
 
 	!ArbitraryAppCode
 
@@ -156,7 +156,7 @@ let KeyMasterTA =
 
 	!(
 		//attestation_agent send app data to secure world, start an attestation
-		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,devPk)]--[]->[];
+		[SecureWorld_Ch_In(sessionID, deviceId,~swId,nonce,packagename,content,appSignature,devPk)]--[]->[];
 
 		//create subject certificate's key
 		new ~key;
@@ -172,6 +172,7 @@ let KeyMasterTA =
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
             event CreateCert(certificateChain);
 			out(certificateChain);
 
@@ -185,6 +186,7 @@ let KeyMasterTA =
 			let certificateChain = <subjectCertificate, intermediateCertificate, rootCertificate> in 
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
             event CreateCert(certificateChain);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 			event Checked('SecureWorldAppFinished_locked_device');
@@ -298,7 +300,21 @@ lemma CertFresh:
 			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
 			    & #j < #k & #k < #i" 
 
+//for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
 lemma DeviceAndAppIntegrity:
+	"(All atId certificateChain #i. Verdict_app(atId,certificateChain,'valid','valid','valid') @ i ==> 
+	( 
+	 (Ex deviceId packagename appSignature #a #b #c. 
+			 App_Created(packagename,appSignature) @ a
+			 & Application_Installed(deviceId,packagename,appSignature) @ b
+			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
+			 & ( not( Ex #k. KU(certificateChain) @ k & k<i ))
+			 
+		)
+	))"
+
+//for all valid verdict =>  Ku should not know its attestation report by any mean
+lemma AttestationReportSecrecy:
 	"(All atId certificateChain #i. Verdict_app(atId,certificateChain,'valid','valid','valid') @ i ==> 
 	 (	not( Ex #k. KU(certificateChain) @ k & k<i ) )
 	)"

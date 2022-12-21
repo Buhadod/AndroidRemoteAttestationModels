@@ -45,7 +45,7 @@ let HonestAppInstallation =
 	[!App_Published(devId,<'App1PackageName','App1Content',pk(advk),
 	                   sign( <'App1PackageName','App1Content',pk(advk)>, advk)>)]--[]-> [];
 
-	event Application_Installed(~deviceId,'App1PackageName','App1Content',sign(<'App1PackageName','App1Content',pk(advk)>, advk));
+	event Application_Installed(~deviceId,'App1PackageName',sign(<'App1PackageName','App1Content',pk(advk)>, advk));
 
 	!AppCode //App code separate from installation 
 
@@ -72,7 +72,7 @@ let ArbitraryAppInstallation =
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
-	event Application_Installed(~deviceId,packagename,~content,appSignature);
+	event Application_Installed(~deviceId,packagename,appSignature);
 
 	!ArbitraryAppCode
 
@@ -176,6 +176,7 @@ let KnoxV3TA =
 
 				///return attestation report to the app
 				event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+				event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
 				[]--[]->[ SecureWorld_Ch_Out(sessionID,hid) ];
 				event Checked('SecureWorldAppFinished_rooted_device');
 				0
@@ -188,6 +189,7 @@ let KnoxV3TA =
 
 				///return attestation report to the app
 				event DeviceStatus(~atId,deviceId,hardwareMeasurement);
+				event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
 				[]--[]->[ SecureWorld_Ch_Out(sessionID,hid) ];
 				event Checked('SecureWorldAppFinished_locked_device');
 				0
@@ -276,10 +278,24 @@ new ~skAT;
 (!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
 
 
+//for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
 lemma DeviceAndAppIntegrity:
-"(All atId hid #i. Verdict_app(atId,hid,'valid','valid','valid') @ i ==> 
- (	not( Ex #k. KU(hid) @ k & k<i ) )
-)"
+	"(All atId hid #i. Verdict_app(atId,hid,'valid','valid','valid') @ i ==> 
+	( 
+	 (Ex deviceId packagename appSignature #a #b #c. 
+			 App_Created(packagename,appSignature) @ a
+			 & Application_Installed(deviceId,packagename,appSignature) @ b
+			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
+			 & ( not( Ex #k. KU(hid) @ k & k<i ))
+			 
+		)
+	))"
+
+//for all valid verdict =>  Ku should not know its attestation report by any mean
+lemma AttestationReportSecrecy:
+	"(All atId hid #i. Verdict_app(atId,hid,'valid','valid','valid') @ i ==> 
+	 (	not( Ex #k. KU(hid) @ k & k<i ) )
+	)"
 
 //for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
@@ -374,6 +390,7 @@ summary of summaries:
 analyzed: KnoxV3.sapic
 
   DeviceAndAppIntegrity (all-traces): verified (5 steps)
+  AttestationReportSecrecy (all-traces): verified (5 steps)
   RepackedAppIntegrity (all-traces): verified (8 steps)
   UniqueNonce (all-traces): verified (28 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
