@@ -173,7 +173,7 @@ let KeyMasterTA =
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
-            event CreateCert(certificateChain);
+			event BlobCreated(certificateChain);
 			out(certificateChain);
 
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
@@ -187,7 +187,7 @@ let KeyMasterTA =
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
-            event CreateCert(certificateChain);
+			event BlobCreated(certificateChain);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0
@@ -204,7 +204,7 @@ let DevServerProtocolCode =
 		new ~nonce;
 		event NonceGenerated(~nonce);
         new ~requestID;
-        event RequestCert(~requestID);
+        event BlobRequested(~requestID);
 		[]--[]-> [Nonce_TLS_Ch(~devId,~nonce)];
 		
 		//retrieve blob from clients
@@ -230,9 +230,10 @@ let DevServerProtocolCode =
 
 		if verfication = true then
 			if result = true then
-				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
-				event Checked('DeveloperServerfinished_valid')
+				event Checked('DeveloperServerfinished_valid');
+				event BlobAccepted(certificateChain);
+				event RequestedBlobAccepted(~requestID,certificateChain)
 			else
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
 				event Checked('DeveloperServerfinished_invalid')
@@ -250,7 +251,7 @@ let DevServerKA =
 	let appSignature = sign( <'App1PackageName','App1Content',pk(~advk)>, ~advk) in 
 	let app = <'App1PackageName','App1Content',pk(~advk),appSignature> in
 	out(app);
-	event App_Created(packagename,pk(~advk));
+	event App_Created(packagename,appSignature);
 
 	[]--[]-> [!App_Published(~devId,app)];
 	
@@ -288,17 +289,9 @@ new ~skAT;
 
 lemma CertPossible:
   exists-trace 
-    "Ex requestID subjectCertificate intermediateCertificate rootCertificate #i #j.
-        (AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-        & RequestCert(requestID)@j) & #j < #i "
-
-
-lemma CertFresh:
-    "All requestID subjectCertificate intermediateCertificate rootCertificate #i.
-        AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-            ==>   Ex #j. RequestCert(requestID)@j
-			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
-			    & #j < #k & #k < #i" 
+    "Ex requestID blob #i #j.
+        (RequestedBlobAccepted(requestID,blob) @i
+        & BlobRequested(requestID)@j) & #j < #i "
 
 //for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
 lemma DeviceAndAppIntegrity:
@@ -318,26 +311,35 @@ lemma AttestationReportSecrecy:
 	 (	not( Ex #k. KU(certificateChain) @ k & k<i ) )
 	)"
 
+//Check if nonce are unique
+// lemma UniqueNonce:
+// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniquBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated(blob)@k & #j < #k & #k < #i" 
+
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
 	"(All atId certificateChain #i. Verdict_app(atId,certificateChain,'valid','valid','invalid') @ i ==> 
 	( 
 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename fpackagename appCertificate fappCertificate #j #k. 
-			 App_Created(packagename,appCertificate) @ j 
-			 & Attestating_App(atId,fpackagename,fappCertificate,deviceId)@ k
-			 & (
-					(not(appCertificate = fappCertificate))
-					| (not(packagename = fpackagename))
-			 	)
-			 
-		)
-	))"
+	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
+		App_Created(packagename,appSignature) @ j 
+		& Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+		& (
+			   (not(appSignature = fappSignature))
+			   | (not(packagename = fpackagename))
+			)
+		
+   )
+))"
 
-//Check if nonce are unique
-lemma UniqueNonce:
-	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
-	
 //Sanity check: Attestation finished with valid device integirty and application integirty. 
 lemma Correctness_Valid_Attestation:
 exists-trace
@@ -406,10 +408,11 @@ summary of summaries:
 analyzed: KeyAttestation_App_Nonce.sapic
 
   CertPossible (exists-trace): verified (4 steps)
-  CertFresh (all-traces): verified (36 steps)
   DeviceAndAppIntegrity (all-traces): verified (17 steps)
+  AttestationReportSecrecy (all-traces): verified (17 steps)
   RepackedAppIntegrity (all-traces): verified (32 steps)
-  UniqueNonce (all-traces): verified (16 steps)
+  UniquBlob (all-traces): verified (16 steps)
+  BlobRecentness (all-traces): verified (36 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
   Correctness_Rooting_Device (exists-trace): verified (6 steps)
   Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
@@ -422,5 +425,6 @@ analyzed: KeyAttestation_App_Nonce.sapic
   Correctness_Attestation_Server_Finished (exists-trace): verified (4 steps)
   Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
   Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
+
 
 ==============================================================================

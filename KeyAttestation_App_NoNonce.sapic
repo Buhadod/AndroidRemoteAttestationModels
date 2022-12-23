@@ -38,7 +38,6 @@ equations:
 /***************************************** Generic *****************************************/
 
 let AppCode = 
-	[Request_Cert(requestID)]--[]-> [];
 
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
@@ -102,12 +101,8 @@ let Device =
 
 	(!HonestAppInstallation | !ArbitraryAppInstallation)
 
-let RelayAttacker1 = 
-	[Request_Cert(requestID)]--[]-> [];
-	out(requestID);
-	0
 
-let RelayAttacker2 = 
+let RelayAttacker = 
 	in(certificateChain);
 	[]--[]-> [Certificate_TLS_Ch(certificateChain)];
 	0
@@ -169,7 +164,8 @@ let KeyMasterTA =
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
-            event CreateCert(certificateChain);
+			event CreateCert(certificateChain);
+			event BlobCreated(certificateChain);
 			out(certificateChain);
 
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
@@ -183,7 +179,8 @@ let KeyMasterTA =
 			//send attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
-            event CreateCert(certificateChain);
+			event CreateCert(certificateChain);
+			event BlobCreated(certificateChain);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,certificateChain) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0			
@@ -192,9 +189,9 @@ let KeyMasterTA =
 
 
 let DevServerProtocolCode =
-        new ~requestID;
-        event RequestCert(~requestID);
-		[]--[]-> [Request_Cert(~requestID)];
+
+		new ~requestID;
+        event BlobRequested(~requestID);
 				
 		//retrieve certificate chain from clients
 		[Certificate_TLS_Ch(<<<atId,hardwareMeasurement,cdate,fpackagename,fdevPk>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>)]--[]-> [];
@@ -219,10 +216,8 @@ let DevServerProtocolCode =
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
 				event Checked('DeveloperServerfinished_valid');
-				if hardwareMeasurement = 'valid' then
-					event BlobAccepted(<<<atId,hardwareMeasurement,cdate,fpackagename,fdevPk>,subjectPk,subjectChain>, intermediateCertificate, rootCertificate>)
-				else
-					0
+				event BlobAccepted(certificateChain);
+				event RequestedBlobAccepted(~requestID,certificateChain)
 			else
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
 				event Checked('DeveloperServerfinished_invalid')
@@ -238,7 +233,7 @@ let DevServerKA =
 	let appSignature = sign(<packagename,'App1Content',pk(~advk)>,~advk) in 
 	let app = <packagename,'App1Content',pk(~advk),appSignature> in
 	out(app);
-	event App_Created(packagename,pk(~advk));
+	event App_Created(packagename,appSignature);
 
 	[]--[]-> [!App_Published(~devId,app)];
 	
@@ -269,22 +264,14 @@ let DevServer =
 //create pair attetsation keys to be used by secreworld for sigining, and attestation server for verfication
 new ~skAT;
 
-(!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
+(!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker)
 
 
 lemma CertPossible:
   exists-trace 
-    "Ex requestID subjectCertificate intermediateCertificate rootCertificate #i #j.
-        (AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-        & RequestCert(requestID)@j) & #j < #i "
-
-
-lemma CertFresh:
-    "All requestID subjectCertificate intermediateCertificate rootCertificate #i.
-        AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
-            ==>   Ex #j. RequestCert(requestID)@j
-			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
-			    & #j < #k & #k < #i" 
+    "Ex requestID blob #i #j.
+        (RequestedBlobAccepted(requestID,blob) @i
+        & BlobRequested(requestID)@j) & #j < #i "
 
 //for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
 lemma DeviceAndAppIntegrity:
@@ -309,21 +296,28 @@ lemma AttestationReportSecrecy:
 lemma UniqueBlob:
 "All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
 
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated(blob)@k & #j < #k & #k < #i" 
+
+
 // for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
 	"(All atId certificateChain #i. Verdict_app(atId,certificateChain,'valid','valid','invalid') @ i ==> 
 	( 
 	(Ex deviceId #j. DeviceStatus(atId,deviceId,'valid') @ j & j < i) 
-	& (Ex deviceId packagename fpackagename appCertificate fappCertificate #j #k. 
-			 App_Created(packagename,appCertificate) @ j 
-			 & Attestating_App(atId,fpackagename,fappCertificate,deviceId)@ k
-			 & (
-					(not(appCertificate = fappCertificate))
-					| (not(packagename = fpackagename))
-			 	)
-			 
-		)
-	))"
+	& (Ex deviceId packagename fpackagename appSignature fappSignature #j #k. 
+		App_Created(packagename,appSignature) @ j 
+		& Attestating_App(atId,fpackagename,fappSignature,deviceId)@ k
+		& (
+			   (not(appSignature = fappSignature))
+			   | (not(packagename = fpackagename))
+			)
+		
+   )
+))"
 
 //Sanity check: Will the dev server ever accept a blob
 lemma Correctness_AcceptBlob:
@@ -402,9 +396,12 @@ summary of summaries:
 analyzed: KeyAttestation_App_NoNonce.sapic
 
   CertPossible (exists-trace): verified (4 steps)
-  CertFresh (all-traces): falsified - found trace (4 steps)
   DeviceAndAppIntegrity (all-traces): verified (16 steps)
+  AttestationReportSecrecy (all-traces): verified (16 steps)
+  UniqueBlob (all-traces): verified (?? steps)
+  BlobRecentness (all-traces): falsified (4 steps)
   RepackedAppIntegrity (all-traces): verified (52 steps)
+  Correctness_AcceptBlob (exists-trace): verified (4 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
   Correctness_Rooting_Device (exists-trace): verified (5 steps)
   Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
