@@ -216,8 +216,11 @@ let DevServerProtocolCode =
 				event AcceptCert(~requestID,<subjectCertificate, intermediateCertificate, rootCertificate>);
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
 				event Checked('DeveloperServerfinished_valid');
-				event BlobAccepted(certificateChain);
-				event RequestedBlobAccepted(~requestID,certificateChain)
+				event RequestedBlobAccepted(~requestID,certificateChain);
+				if hardwareMeasurement = 'valid' then
+					event BlobAccepted(certificateChain)
+				else 
+					0
 			else
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'invalid');
 				event Checked('DeveloperServerfinished_invalid')
@@ -398,7 +401,7 @@ analyzed: KeyAttestation_App_NoNonce.sapic
   CertPossible (exists-trace): verified (4 steps)
   DeviceAndAppIntegrity (all-traces): verified (16 steps)
   AttestationReportSecrecy (all-traces): verified (16 steps)
-  UniqueBlob (all-traces): verified (?? steps)
+  UniqueBlob (all-traces): verified (38 steps)
   BlobRecentness (all-traces): falsified (4 steps)
   RepackedAppIntegrity (all-traces): verified (52 steps)
   Correctness_AcceptBlob (exists-trace): verified (4 steps)
