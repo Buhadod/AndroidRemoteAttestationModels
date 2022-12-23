@@ -289,6 +289,20 @@ lemma AttestationReportSecrecy:
 	 (	not( Ex #k. KU(blob) @ k & k<i ) )
 	)"
 
+// Check if nonce are unique 
+// lemma UniqueNonce:
+// "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated (blob)@k & #j < #k & #k < #i" 
+
+
 //for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
 "(All atId blob #i. Verdict_app(atId,blob,'valid','valid','invalid') @ i ==> 
@@ -305,18 +319,6 @@ lemma RepackedAppIntegrity:
 	)
 ))"
 
-// Check if nonce are unique 
-// lemma UniqueNonce:
-// "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
-
-/// Check if accepted blobs are unique 
-lemma UniqueBlob:
-"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
-
-// Check if the blob generated recently
-lemma BlobRecentness:
-    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
-	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated (blob)@k & #j < #k & #k < #i" 
 
 
 //Sanity check: Will the dev server ever accept a blob
@@ -396,24 +398,24 @@ summary of summaries:
 
 analyzed: SafetyNetSW.sapic
 
-  DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
-  AttestationReportSecrecy (all-traces): falsified - found trace (8 steps)
-  UniqueBlob (all-traces): verified (?? steps)
-  BlobRecentness (all-traces): verified (?? steps)
-  RepackedAppIntegrity (all-traces): falsified - found trace (7 steps)
-//   UniqueNonce (all-traces): verified (16 steps)
-  Correctness_Valid_Attestation (exists-trace): verified (4 steps)
-  Correctness_Rooting_Device (exists-trace): verified (6 steps)
-  Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
-  Correctness_Honest_App (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
-  Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
-  Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
-  Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
+	DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
+	AttestationReportSecrecy (all-traces): falsified - found trace (8 steps)
+	UniqueBlob (all-traces): verified (24 steps)
+	BlobRecentness (all-traces): verified (11 steps)
+	RepackedAppIntegrity (all-traces): falsified - found trace (7 steps) //because of rooting
+	Correctness_AcceptBlob (exists-trace): verified (3 steps)
+	Correctness_Valid_Attestation (exists-trace): verified (4 steps)
+	Correctness_Rooting_Device (exists-trace): verified (6 steps)
+	Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+	Correctness_Honest_App (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+	Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
+	Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
+	Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
 
 ==============================================================================
