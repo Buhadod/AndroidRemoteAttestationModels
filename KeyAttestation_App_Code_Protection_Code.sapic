@@ -346,11 +346,11 @@ lemma CertPossible:
         & RequestCert(requestID)@j) & #j < #i "
 
 
-lemma CertFresh:
-    "All requestID subjectCertificate intermediateCertificate rootCertificate #i.
-        AcceptCert(requestID,<subjectCertificate, intermediateCertificate, rootCertificate>) @i
+lemma BlobRecentness:
+    "All requestID blob #i.
+        AcceptCert(requestID,blob) @i
             ==>   Ex #j. RequestCert(requestID)@j
-			    & Ex #k. CreateCert (<subjectCertificate, intermediateCertificate, rootCertificate>)@k
+			    & Ex #k. CreateCert (blob)@k
 			    & #j < #k & #k < #i" 
 
 //Check if nonce are unique
@@ -474,28 +474,27 @@ summary of summaries:
 
 analyzed: KeyAttestation_App_Code_Protection_Code.sapic
 
-  CertPossible (exists-trace): verified (13 steps)
-  CertFresh (all-traces): verified (76 steps)
-  UniqueNonce (all-traces): verified (8 steps)
-  CorrectnessValidSecret (exists-trace): verified (17 steps)
-  SecretValidity (all-traces): verified (15 steps)
-  SecretSecrecy (all-traces): verified (164 steps)
-  SecretSecrecyKU (all-traces): verified (20 steps)
-  SecretSecrecyAgainstRepakedApp (all-traces): verified (73 steps)
-  SecretSecrecyAgainstRootedDevice (all-traces): verified (72 steps)
-  CodeInjection (all-traces): verified (86 steps)
-  CodeInjectionByRootedDevice (exists-trace): verified (9 steps)
-  Correctness_Valid_Attestation (exists-trace): verified (13 steps)
-  Correctness_Rooting_Device (exists-trace): verified (13 steps)
-  Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
-  Correctness_Honest_App (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
-  Correctness_Honest_App_Finished (exists-trace): verified (7 steps)
-  Correctness_Arbitrary_App_Finished (exists-trace): verified (6 steps)
-  Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (6 steps)
-  Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (6 steps)
-  Correctness_Attestation_Server_Finished (exists-trace): verified (4 steps)
-  Correctness_Developer_Server_Finished_VALID (exists-trace): verified (13 steps)
-  Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (13 steps)
+	CertPossible (exists-trace): verified (13 steps)
+	BlobRecentness (all-traces): verified (76 steps)
+	CorrectnessValidSecret (exists-trace): verified (17 steps)
+	SecretValidity (all-traces): verified (15 steps)
+	SecretSecrecy (all-traces): verified (164 steps)
+	SecretSecrecyKU (all-traces): verified (20 steps)
+	SecretSecrecyAgainstRepakedApp (all-traces): verified (73 steps)
+	SecretSecrecyAgainstRootedDevice (all-traces): verified (72 steps)
+	CodeInjection (all-traces): verified (86 steps)
+	CodeInjectionByRootedDevice (exists-trace): verified (9 steps)
+	Correctness_Valid_Attestation (exists-trace): verified (13 steps)
+	Correctness_Rooting_Device (exists-trace): verified (13 steps)
+	Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+	Correctness_Honest_App (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+	Correctness_Honest_App_Finished (exists-trace): verified (7 steps)
+	Correctness_Arbitrary_App_Finished (exists-trace): verified (6 steps)
+	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (6 steps)
+	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (6 steps)
+	Correctness_Attestation_Server_Finished (exists-trace): verified (4 steps)
+	Correctness_Developer_Server_Finished_VALID (exists-trace): verified (13 steps)
+	Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (13 steps)
 
   ==============================================================================
