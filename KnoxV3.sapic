@@ -133,12 +133,11 @@ let AtServerKV3 =
 			event Checked('AttestationServerFinished_valid');
 			0 
 			
-
 		else
 			//create a verdict  and send it to the developer server
 			let verdict = 'invalid' in
 			[]--[]-> [Attestation_Server_Ch_Out(sid,<verdict,atId,nonce,hardwareMeasurement,packagename,appSignature>)];
-			event Checked('AttestationServerFinished_valid');
+			event Checked('AttestationServerFinished_invalid');
 			0
 	)
 
@@ -305,6 +304,21 @@ lemma AttestationReportSecrecy:
 	 (	not( Ex #k. KU(hid) @ k & k<i ) )
 	)"
 
+
+// Check if nonce are unique 
+// lemma UniqueNonce:
+// "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated (blob)@k & #j < #k & #k < #i" 
+
+
 //for all failed application integrity check only  => (device must be valid and there an app created, an app attested and either the hash is different or packagename).
 lemma RepackedAppIntegrity:
 "(All atId hid #i. Verdict_app(atId,hid,'valid','valid','invalid') @ i ==> 
@@ -320,19 +334,6 @@ lemma RepackedAppIntegrity:
 		 
 	)
 ))"
-
-// Check if nonce are unique 
-// lemma UniqueNonce:
-// "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
-
-// Check if accepted blobs are unique 
-lemma UniqueBlob:
-"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
-
-// Check if the blob generated recently
-lemma BlobRecentness:
-    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
-	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated (blob)@k & #j < #k & #k < #i" 
 
 
 //Sanity check: Will the dev server ever accept a blob
@@ -412,25 +413,25 @@ summary of summaries:
 
 analyzed: KnoxV3.sapic
 
-  DeviceAndAppIntegrity (all-traces): verified (5 steps)
-  AttestationReportSecrecy (all-traces): verified (5 steps)
-  UniqueBlob (all-traces): verified (?? steps)
-  BlobRecentness (all-traces): verified (14 steps)
-  RepackedAppIntegrity (all-traces): verified (8 steps)
-//   UniqueNonce (all-traces): verified (28 steps)
-  Correctness_Valid_Attestation (exists-trace): verified (4 steps)
-  Correctness_Rooting_Device (exists-trace): verified (6 steps)
-  Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
-  Correctness_Honest_App (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
-  Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_INVALID (exists-trace): falsified - no trace found (2 steps)
-  Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
-  Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
+	DeviceAndAppIntegrity (all-traces): verified (5 steps)
+	AttestationReportSecrecy (all-traces): verified (5 steps)
+	UniqueBlob (all-traces): verified (24 steps)
+	BlobRecentness (all-traces): verified (14 steps)
+	RepackedAppIntegrity (all-traces): verified (8 steps)
+	Correctness_AcceptBlob (exists-trace): verified (3 steps)
+	Correctness_Valid_Attestation (exists-trace): verified (4 steps)
+	Correctness_Rooting_Device (exists-trace): verified (6 steps)
+	Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+	Correctness_Honest_App (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+	Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_INVALID (exists-trace): 
+	Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
+	Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
 
 ==============================================================================
 

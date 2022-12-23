@@ -375,9 +375,8 @@ analyzed: KnoxV2.sapic
 
 	DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
 	AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
-	// UniqueNonce (all-traces): verified (16 steps)
 	UniqueBlob (all-traces): verified (28 steps)
-	BlobRecentness (all-traces): verified
+	BlobRecentness (all-traces): verified (13 steps)
 	Correctness_AcceptBlob (exists-trace): verified (4 steps)
 	Correctness_Valid_Attestation (exists-trace): verified (3 steps)
 	Correctness_Rooting_Device (exists-trace): verified (4 steps)
@@ -391,5 +390,6 @@ analyzed: KnoxV2.sapic
 	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
 	Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
 	Correctness_Developer_Server_Finished (exists-trace): verified (4 steps)
+
 
 ==============================================================================
