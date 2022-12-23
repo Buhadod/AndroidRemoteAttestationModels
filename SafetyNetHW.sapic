@@ -157,6 +157,7 @@ let SafetyNetTA =
 			in(<fnonce,fpackagename,fappSignature>);	// adversary's custom softeware-based values
 			let report = report(<~atId,fnonce,hardwareMeasurement,fpackagename,fappSignature>) in 
 			let blob = <~atId, fnonce, hardwareMeasurement,fpackagename,fappSignature, report,sign(report,~skAT)> in
+			event BlobCreated(blob);
 			out(blob);
 
 			///return attestation report to the app
@@ -172,6 +173,7 @@ let SafetyNetTA =
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
+			event BlobCreated(blob);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0
@@ -180,9 +182,12 @@ let SafetyNetTA =
 	)@<'loc',pk(~skAT)>
 
 let DevServerProtocolCode =
+
 	// create a nonce
 	new ~nonce;
 	event NonceGenerated(~nonce);
+	new ~requestID;
+    event BlobRequested(~requestID);
 	[]--[]-> [Nonce_TLS_Ch(~devId,~nonce)];
 
 	//retrieve blob from clients
@@ -208,7 +213,11 @@ let DevServerProtocolCode =
 	if result = true then
 		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'valid');
 		event Checked('DeveloperServerfinished_valid');
-		event BlobAccepted(blob)
+		if verdict = 'valid' then
+			event BlobAccepted(blob);
+			event RequestedBlobAccepted(~requestID,blob)
+		else 
+			0
 	else
 		event Verdict_app(atId,blob,verdict,hardwareMeasurement,'invalid');
 		event Checked('DeveloperServerfinished_invalid')
@@ -267,7 +276,6 @@ lemma DeviceAndAppIntegrity:
 			 App_Created(packagename,appSignature) @ a
 			 & Application_Installed(deviceId,packagename,appSignature) @ b
 			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
-			 & ( not( Ex #k. KU(blob) @ k & k<i ))
 			 
 		)
 	))"
@@ -295,13 +303,21 @@ lemma RepackedAppIntegrity:
 	))"
 
 // Check if nonce are unique 
-lemma UniqueNonce:
-	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+// lemma UniqueNonce:
+// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 	
 /// Check if accepted blobs are unique 
 lemma UniqueBlob:
 "All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
 
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated(blob)@k & #j < #k & #k < #i" 
+
+lemma test:
+	  exists-trace
+		  "Ex blob #i. BlobCreated(blob)@i"
 //Sanity check: Will the dev server ever accept a blob
 lemma Correctness_AcceptBlob:
 exists-trace
@@ -381,8 +397,10 @@ analyzed: SafetyNetHW.sapic
 
   DeviceAndAppIntegrity (all-traces): verified (5 steps)
   AttestationReportSecrecy (all-traces): verified (5 steps)
+  UniqueBlob (all-traces): verified (?? steps)
+  BlobRecentness (all-traces): verified (11 steps)
   RepackedAppIntegrity (all-traces): verified (7 steps)
-  UniqueNonce (all-traces): verified (16 steps)
+//   UniqueNonce (all-traces): verified (16 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
   Correctness_Rooting_Device (exists-trace): verified (6 steps)
   Correctness_Setting_Up_Device (exists-trace): verified (4 steps)

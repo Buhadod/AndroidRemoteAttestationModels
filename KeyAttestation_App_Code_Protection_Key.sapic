@@ -361,8 +361,8 @@ lemma CertFresh:
 			    & #j < #k & #k < #i" 
 
 //Check if nonce are unique
-lemma UniqueNonce:
-	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+// lemma UniqueNonce:
+// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 
 lemma CorrectnessValidSecret:
 	exists-trace

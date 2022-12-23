@@ -168,11 +168,13 @@ let KnoxV2TA =
 			in(<fnonce>);	// adversary's custom softeware-based values
 			let report = report(<~atId,fnonce,hardwareMeasurement>) in 
 			let blob = <~atId, fnonce, hardwareMeasurement, report,sign(report,~skAT)> in
-			out(blob);
+			event BlobCreated(blob);
 
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
+			
+			out(blob);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
 			event Checked('SecureWorldAppFinished_rooted_device');
 			0
@@ -183,6 +185,7 @@ let KnoxV2TA =
 			///return attestation report to the app
 			event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 			event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
+			event BlobCreated(blob);
 			[]--[]->[ SecureWorld_Ch_Out(sessionID,blob) ];
 			event Checked('SecureWorldAppFinished_locked_device');
 			0
@@ -193,9 +196,12 @@ let KnoxV2TA =
 
 
 let DevServerProtocolCode =
+	
 	// create a nonce
 	new ~nonce;
 	event NonceGenerated(~nonce);
+	new ~requestID;
+    event BlobRequested(~requestID);
 	[]--[]-> [Nonce_TLS_Ch(~devId,~nonce)];
 
 	//retrieve blob from clients
@@ -215,7 +221,8 @@ let DevServerProtocolCode =
 	event Verdict_app(atId,blob,verdict,hardwareMeasurement); 
 	event Checked('DeveloperServerfinished');
 	if verdict = 'valid' then
-		event BlobAccepted(blob) ;0
+		event BlobAccepted(blob);
+		event RequestedBlobAccepted(~requestID,blob)
 	else
 		0
 
@@ -271,7 +278,6 @@ lemma DeviceAndAppIntegrity:
 			 App_Created(packagename,appSignature) @ a
 			 & Application_Installed(deviceId,packagename,appSignature) @ b
 			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
-			 & ( not( Ex #k. KU(blob) @ k & k<i ))
 		)
 	))"
 
@@ -283,12 +289,17 @@ lemma AttestationReportSecrecy:
 
 
 //Check if nonce are unique
-lemma UniqueNonce:
-	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+// lemma UniqueNonce:
+// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 
 /// Check if accepted blobs are unique 
 lemma UniqueBlob:
 "All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated(blob)@k & #j < #k & #k < #i" 
 
 //Sanity check: Will the dev server ever accept a blob
 lemma Correctness_AcceptBlob:
@@ -362,20 +373,23 @@ summary of summaries:
 
 analyzed: KnoxV2.sapic
 
-  DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
-  AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
-  UniqueNonce (all-traces): verified (16 steps)
-  Correctness_Valid_Attestation (exists-trace): verified (3 steps)
-  Correctness_Rooting_Device (exists-trace): verified (4 steps)
-  Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
-  Correctness_Honest_App (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App (exists-trace): verified (4 steps)
-  Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
-  Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
-  Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
-  Correctness_Developer_Server_Finished (exists-trace): verified (4 steps)
+	DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
+	AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
+	// UniqueNonce (all-traces): verified (16 steps)
+	UniqueBlob (all-traces): verified (28 steps)
+	BlobRecentness (all-traces): verified
+	Correctness_AcceptBlob (exists-trace): verified (4 steps)
+	Correctness_Valid_Attestation (exists-trace): verified (3 steps)
+	Correctness_Rooting_Device (exists-trace): verified (4 steps)
+	Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+	Correctness_Honest_App (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+	Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
+	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
+	Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
+	Correctness_Developer_Server_Finished (exists-trace): verified (4 steps)
 
 ==============================================================================

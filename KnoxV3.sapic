@@ -172,6 +172,7 @@ let KnoxV3TA =
 				let blob = <~atId, fnonce, hardwareMeasurement,fpackagename,fappSignature, report,sign(report,~skAT)> in				///send attestation report to the attestation server
 				[]--[]-> [HID_TLS_Ch_Out(~tsid,blob)];
 				[HID_TLS_Ch_In(~tsid,hid)]--[]-> [];
+				event BlobCreated(hid);
 				out(hid);
 
 				///return attestation report to the app
@@ -190,6 +191,7 @@ let KnoxV3TA =
 				///return attestation report to the app
 				event DeviceStatus(~atId,deviceId,hardwareMeasurement);
 				event Attestating_App_Device(~atId,deviceId,packagename,appSignature,hardwareMeasurement);
+				event BlobCreated(hid);
 				[]--[]->[ SecureWorld_Ch_Out(sessionID,hid) ];
 				event Checked('SecureWorldAppFinished_locked_device');
 				0
@@ -198,9 +200,12 @@ let KnoxV3TA =
 	)@<'loc',pk(~skAT)>
 
 let DevServerProtocolCode =
+
 	// create a nonce
 	new ~nonce;
 	event NonceGenerated(~nonce);
+	new ~requestID;
+    event BlobRequested(~requestID);
 	[]--[]-> [Nonce_TLS_Ch(~devId,~nonce)];
 
 	//retrive hid from clients
@@ -226,7 +231,11 @@ let DevServerProtocolCode =
 	if result = true then
 		event Verdict_app(atId,hid,verdict,hardwareMeasurement,'valid');
 		event Checked('DeveloperServerfinished_valid');
-		event BlobAccepted(<verdict,atId,~nonce,hardwareMeasurement,fpackagename,fappSignature>)
+		if verdict = 'valid' then
+			event BlobAccepted(hid);
+			event RequestedBlobAccepted(~requestID,hid)
+		else 
+			0
 	else
 		event Verdict_app(atId,hid,verdict,hardwareMeasurement,'invalid');
 		event Checked('DeveloperServerfinished_invalid')
@@ -286,7 +295,6 @@ lemma DeviceAndAppIntegrity:
 			 App_Created(packagename,appSignature) @ a
 			 & Application_Installed(deviceId,packagename,appSignature) @ b
 			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
-			 & ( not( Ex #k. KU(hid) @ k & k<i ))
 			 
 		)
 	))"
@@ -314,12 +322,18 @@ lemma RepackedAppIntegrity:
 ))"
 
 // Check if nonce are unique 
-lemma UniqueNonce:
-"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+// lemma UniqueNonce:
+// "All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 
-/// Check if accepted blobs are unique 
+// Check if accepted blobs are unique 
 lemma UniqueBlob:
 "All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
+// Check if the blob generated recently
+lemma BlobRecentness:
+    "All requestID blob #i. RequestedBlobAccepted(requestID,blob) @i ==> 
+	  Ex #j. BlobRequested(requestID)@j & Ex #k. BlobCreated (blob)@k & #j < #k & #k < #i" 
+
 
 //Sanity check: Will the dev server ever accept a blob
 lemma Correctness_AcceptBlob:
@@ -400,8 +414,10 @@ analyzed: KnoxV3.sapic
 
   DeviceAndAppIntegrity (all-traces): verified (5 steps)
   AttestationReportSecrecy (all-traces): verified (5 steps)
+  UniqueBlob (all-traces): verified (?? steps)
+  BlobRecentness (all-traces): verified (14 steps)
   RepackedAppIntegrity (all-traces): verified (8 steps)
-  UniqueNonce (all-traces): verified (28 steps)
+//   UniqueNonce (all-traces): verified (28 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
   Correctness_Rooting_Device (exists-trace): verified (6 steps)
   Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
