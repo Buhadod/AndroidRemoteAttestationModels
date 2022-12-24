@@ -271,6 +271,7 @@ let DevServerProtocolCode =
 				event Verdict_app(atId,certificateChain,'valid',hardwareMeasurement,'valid');
 				event Checked('DeveloperServerfinished_valid');
 				if hardwareMeasurement = 'valid' then
+					event BlobAccepted(certificateChain);
 					out(cipher)
 				else
 					0
@@ -353,6 +354,14 @@ lemma CertPossible:
         & RequestCert(requestID)@j) & #j < #i "
 
 
+//Check if nonce are unique
+// lemma UniqueNonce:
+// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
+
+/// Check if accepted blobs are unique 
+lemma UniqueBlob:
+"All n #i #j.  BlobAccepted(n) @i & BlobAccepted(n) @j ==> #i=#j"
+
 lemma BlobRecentness:
 "All requestID blob #i.
 	AcceptCert(requestID,blob) @i
@@ -360,9 +369,6 @@ lemma BlobRecentness:
 			& Ex #k. CreateCert (blob)@k
 			& #j < #k & #k < #i" 
 
-//Check if nonce are unique
-// lemma UniqueNonce:
-// 	"All n #i #j. NonceReceived(n) @i & NonceReceived(n) @j ==> #i=#j"
 
 lemma CorrectnessValidSecret:
 	exists-trace
@@ -485,6 +491,7 @@ summary of summaries:
 analyzed: KeyAttestation_App_Code_Protection_Key.sapic
 
 	CertPossible (exists-trace): verified (13 steps)
+	UniqueBlob (all-traces): verified (8 steps)
 	BlobRecentness (all-traces): verified (76 steps)
 	CorrectnessValidSecret (exists-trace): verified (17 steps)
 	SecretValidity (all-traces): verified (17 steps)
