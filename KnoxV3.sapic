@@ -429,7 +429,7 @@ analyzed: KnoxV3.sapic
 	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
 	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
 	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
-	Correctness_Attestation_Server_Finished_INVALID (exists-trace): falsified - no trace found (3 steps) //<<-- because the valid once stored by the attestation server and the advasery cannot craft hid that has invalid measurement.
+	Correctness_Attestation_Server_Finished_INVALID (exists-trace): falsified - no trace found (3 steps) //<<-- because the valid ones stored by the attestation server and the advasery cannot craft hid that has invalid measurement.
 	Correctness_Developer_Server_Finished_VALID (exists-trace): verified (4 steps)
 	Correctness_Developer_Server_Finished_INVALID (exists-trace): verified (6 steps)
 
