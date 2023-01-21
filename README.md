@@ -1,4 +1,4 @@
-# CodeProtectionModel
+# Android Remote attestation models 
 
 The proof results of all the protocols are avalaible at the end of each protocol file.
 
