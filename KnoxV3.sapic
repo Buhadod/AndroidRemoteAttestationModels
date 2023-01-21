@@ -1,6 +1,27 @@
 /*******************************************************************************
 	Remote attestation Framework
-	AUTHORS
+	Protocol : Knox Attestation V2
+	Status : Working
+
+	* Processes
+	AppCode : an honest app's logic 
+	HonestAppInstallation : Allows installation of an honest app
+	ArbitraryAppCode : An arbitrary app's logic
+	ArbitraryAppInstallation : Allows installation of an arbitrary app
+	Device : A mobile device process, it sets up a secure world and allows installing apps.
+	AttestationAgent : A trusted attestation agent installed in a secure world to create a measurement report. 
+	AtServer : An attestation server that verifies measurement reports.
+	DevServer : The developer server of the honest apps. 
+	RelayAttacker1 : An attacker process to retrieve a nonce from the developer server via a secure channel
+	RelayAttacker2 : An attacker process to send the `hid` to the developer server via a secure channel
+
+	* Channels
+	SecureWorld_Ch_In : A secure channel from an app to a trusted agent to send app information
+	SecureWorld_Ch_Out : A secure channel from a trusted agent to an app that sends the `hid`.
+	Nonce_TLS_Ch : A secure channel from the developer server to send a nonce.
+	HID_TLS_Ch: A secure channel from a client (an attacker or an app) to the developer server that sends the `hid`.
+	HID_TLS_Ch_Out : A secure channel from the `AttestationAgent` to the attestation server that sends the `blob`.
+	HID_TLS_Ch_In : A secure channel from the attestation server to the `AttestationAgent` that sends the `hid`.
 	
 	
 *******************************************************************************/
@@ -67,7 +88,7 @@ let ArbitraryAppInstallation =
 	in(<packagename, devKey>); //Attacker can pick the app name and the dev key.
 
 	new ~content;  //contents are different from any honest app, so we model as a free name
-
+	the secure world to app information to
 	let appSignature = sign(<packagename,~content,pk(devKey)>, devKey) in
 	let app = <packagename,~content,pk(devKey),appSignature> in
 	out(app);

@@ -1,7 +1,25 @@
 /*******************************************************************************
-	Attested key exchange (AKE) protocol - based on Key attestation
-	AUTHORS
-	
+	Remote attestation Framework
+	Protocol : Attested key exchange (AKE) protocol - based on Key attestation
+	Status : Working
+
+	* Processes
+	AppCode : An honest app's logic 
+	HonestAppInstallation : Allows installation of an honest app
+	ArbitraryAppCode : An arbitrary app's logic
+	ArbitraryAppInstallation : Allows installation of an arbitrary app
+	Device : A mobile device process, it sets up a secure world and allows installing apps.
+	AttestationAgent : A trusted attestation agent that creates a certificate chain `certificateChain`. 
+	AtServer : An attestation server that published its root certificate.
+	DevServer : The developer server of the honest apps. 
+	RelayAttacker1 : An attacker process to retrieve a nonce from the developer server via a secure channel
+	RelayAttacker2 : An attacker process to send the `certificateChain` to the developer server via a secure channel
+
+	* Channels
+	SecureWorld_Ch_In : A secure channel from an app to a trusted agent to send app information
+	SecureWorld_Ch_Out : A secure channel from a trusted agent to an app that sends the `certificateChain`.
+	Certificate_TLS_Ch: A secure channel from a client (an attacker or an app) to the developer server that sends the `certificateChain`.
+	RequestCreatingIntermediateCertificate : A channel from the attesation server to the trusted agent `KeyMasterTA` to generate its certificate `intermediateCertificate`.
 	
 *******************************************************************************/
 

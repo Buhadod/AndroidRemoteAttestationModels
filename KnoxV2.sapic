@@ -1,6 +1,27 @@
 /*******************************************************************************
 	Remote attestation Framework
-	AUTHORS
+	Protocol : Knox Attestation V2
+	Status : Working
+
+	* Processes
+	AppCode : An honest app's logic 
+	HonestAppInstallation : Allows installation of an honest app
+	ArbitraryAppCode : An arbitrary app's logic
+	ArbitraryAppInstallation : Allows installation of an arbitrary app
+	Device : A mobile device process, it sets up a secure world and allows installing apps.
+	AttestationAgent : A trusted attestation agent installed in a secure world to create a measurement report. 
+	AtServer : An attestation server that verifies measurement reports.
+	DevServer : The developer server of the honest apps. 
+	RelayAttacker1 : An attacker process to retrieve a nonce from the developer server via a secure channel
+	RelayAttacker2 : An attacker process to send the `blob` to the developer server via a secure channel
+
+	* Channels
+	SecureWorld_Ch_In : A secure channel from an app to the `AttestationAgent` to send app information
+	SecureWorld_Ch_Out : A secure channel from a secure-world to an app that sends the `blob` back.
+	Nonce_TLS_Ch : A secure channel from the developer server to send a nonce.
+	BLOB_TLS_Ch: A secure channel from a client (an attacker or an app) to the developer server that sends the `blob`.
+	Attestation_Server_Ch_In : A secure channel from the developer server to the attestation server that sends the `blob`.
+	Attestation_Server_Ch_Out : A secure channel from the attestation server to the developer server that send the verdict. 
 	
 	
 *******************************************************************************/
