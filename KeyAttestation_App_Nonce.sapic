@@ -319,7 +319,8 @@ lemma DeviceAndAppIntegrity:
 	 (Ex deviceId packagename appSignature #a #b #c. 
 			 App_Created(packagename,appSignature) @ a
 			 & Application_Installed(deviceId,packagename,appSignature) @ b
-			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c & c < i
+			 & Attestating_App_Device(atId,deviceId,packagename,appSignature,'valid')@ c
+			 & a < b & b < c & c < i
 			 
 		)
 	))"
