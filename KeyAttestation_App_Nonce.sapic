@@ -88,7 +88,7 @@ let ArbitraryAppCode =
 	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature,pk(devKey))];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,content,appSignature,pk(devKey))];
 	[ SecureWorld_Ch_Out(~sessionID,certificateChain) ]--[]-> [];
 	out(certificateChain);
 	event Checked('ArbitraryAppFinished');
@@ -98,12 +98,10 @@ let ArbitraryAppInstallation =
 
 	event Checked('ArbitraryAppInstallation');
 	//install an application
-	in(<packagename, devKey>); 
+	in(<packagename,content, devKey>); 
 
-	new ~content;
-
-	let appSignature = sign(<packagename,~content,pk(devKey)>,devKey) in
-	let app = <packagename,~content,pk(devKey),appSignature> in
+	let appSignature = sign(<packagename,content,pk(devKey)>,devKey) in
+	let app = <packagename,content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
 	event Application_Installed(~deviceId,packagename,appSignature);
@@ -430,9 +428,9 @@ analyzed: KeyAttestation_App_Nonce.sapic
   CertPossible (exists-trace): verified (4 steps)
   DeviceAndAppIntegrity (all-traces): verified (17 steps)
   AttestationReportSecrecy (all-traces): verified (17 steps)
-  RepackedAppIntegrity (all-traces): verified (32 steps)
   UniquBlob (all-traces): verified (16 steps)
   BlobRecentness (all-traces): verified (36 steps)
+  RepackedAppIntegrity (all-traces): verified (31 steps)
   Correctness_Valid_Attestation (exists-trace): verified (4 steps)
   Correctness_Rooting_Device (exists-trace): verified (6 steps)
   Correctness_Setting_Up_Device (exists-trace): verified (4 steps)

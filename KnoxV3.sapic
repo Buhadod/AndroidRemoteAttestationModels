@@ -76,7 +76,7 @@ let ArbitraryAppCode =
 	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,content,appSignature)];
 	[ SecureWorld_Ch_Out(~sessionID,hid) ]--[]-> [];
 	out(hid);
 	event Checked('ArbitraryAppFinished');
@@ -85,11 +85,10 @@ let ArbitraryAppCode =
 let ArbitraryAppInstallation =
 	event Checked('ArbitraryAppInstallation');
 	//install an application
-	in(<packagename, devKey>); //Attacker can pick the app name and the dev key.
+	in(<packagename,content, devKey>); //Attacker can pick the app name and the dev key.
 
-	new ~content;  //contents are different from any honest app, so we model as a free name
-	let appSignature = sign(<packagename,~content,pk(devKey)>, devKey) in
-	let app = <packagename,~content,pk(devKey),appSignature> in
+	let appSignature = sign(<packagename,content,pk(devKey)>, devKey) in
+	let app = <packagename,content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
 	event Application_Installed(~deviceId,packagename,appSignature);
@@ -433,11 +432,11 @@ summary of summaries:
 
 analyzed: KnoxV3.sapic
 
-	DeviceAndAppIntegrity (all-traces): verified (5 steps)
-	AttestationReportSecrecy (all-traces): verified (5 steps)
-	UniqueBlob (all-traces): verified (24 steps)
-	BlobRecentness (all-traces): verified (14 steps)
-	RepackedAppIntegrity (all-traces): verified (8 steps)
+	DeviceAndAppIntegrity (all-traces): verified (8 steps)
+	AttestationReportSecrecy (all-traces): verified (8 steps)
+	UniqueBlob (all-traces): verified (28 steps)
+	BlobRecentness (all-traces): verified (17 steps)
+	RepackedAppIntegrity (all-traces): verified (9 steps)
 	Correctness_AcceptBlob (exists-trace): verified (3 steps)
 	Correctness_Valid_Attestation (exists-trace): verified (4 steps)
 	Correctness_Rooting_Device (exists-trace): verified (6 steps)

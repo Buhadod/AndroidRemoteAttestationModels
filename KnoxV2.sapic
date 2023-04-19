@@ -77,7 +77,7 @@ let ArbitraryAppCode =
 	event NonceReceivedAtArbApp(nonce);
 	//attestation_agent send app data to secure world to start an attestation
 	new ~sessionID;
-	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,~content,appSignature)];
+	[]--[]-> [SecureWorld_Ch_In(~sessionID,~deviceId,swId,nonce,packagename,content,appSignature)];
 	[ SecureWorld_Ch_Out(~sessionID,blob) ]--[]-> [];
 	out(blob);
 	event Checked('ArbitraryAppFinished');
@@ -86,12 +86,10 @@ let ArbitraryAppCode =
 let ArbitraryAppInstallation =
 	event Checked('ArbitraryAppInstallation');
 	//install an application
-	in(<packagename, devKey>); //Attacker can pick the app name and the dev key.
+	in(<packagename,content, devKey>); //Attacker can pick the app name and the dev key.
 
-	new ~content;  //contents are different from any honest app, so we model as a free name
-
-	let appSignature = sign(<packagename,~content,pk(devKey)>,devKey) in
-	let app = <packagename,~content,pk(devKey),appSignature> in
+	let appSignature = sign(<packagename,content,pk(devKey)>,devKey) in
+	let app = <packagename,content,pk(devKey),appSignature> in
 	out(app);
 	event Arbitrary_App_Created(packagename,appSignature);
 	event Application_Installed(~deviceId,packagename,appSignature);
@@ -292,7 +290,7 @@ new ~skAT;
 (!Device || !DevServer || AtServer || !AttestationAgent || !RelayAttacker1 || !RelayAttacker2)
 
 //for all valid verdict => honest apps must created, installed, attested in a valid device and KU does know its attestation report
-lemma DeviceAndAppIntegrity:
+lemma DeviceIntegrity:
 	"(All atId blob #i. Verdict_app(atId,blob,'valid','valid') @ i ==> 
 	( 
 	 (Ex deviceId packagename appSignature #a #b #c. 
@@ -395,23 +393,23 @@ summary of summaries:
 
 analyzed: KnoxV2.sapic
 
-	DeviceAndAppIntegrity (all-traces): falsified - found trace (6 steps)
-	AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
-	UniqueBlob (all-traces): verified (28 steps)
-	BlobRecentness (all-traces): verified (13 steps)
-	Correctness_AcceptBlob (exists-trace): verified (4 steps)
-	Correctness_Valid_Attestation (exists-trace): verified (3 steps)
-	Correctness_Rooting_Device (exists-trace): verified (4 steps)
-	Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
-	Correctness_Honest_App (exists-trace): verified (4 steps)
-	Correctness_Arbitrary_App (exists-trace): verified (4 steps)
-	Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
-	Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
-	Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
-	Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
-	Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
-	Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
-	Correctness_Developer_Server_Finished (exists-trace): verified (4 steps)
+DeviceIntegrity (all-traces): falsified - found trace (6 steps)
+AttestationReportSecrecy (all-traces): falsified - found trace (6 steps)
+UniqueBlob (all-traces): verified (28 steps)
+BlobRecentness (all-traces): verified (13 steps)
+Correctness_AcceptBlob (exists-trace): verified (4 steps)
+Correctness_Valid_Attestation (exists-trace): verified (3 steps)
+Correctness_Rooting_Device (exists-trace): verified (4 steps)
+Correctness_Setting_Up_Device (exists-trace): verified (4 steps)
+Correctness_Honest_App (exists-trace): verified (4 steps)
+Correctness_Arbitrary_App (exists-trace): verified (4 steps)
+Correctness_Honest_App_Finished (exists-trace): verified (4 steps)
+Correctness_Arbitrary_App_Finished (exists-trace): verified (4 steps)
+Correctness_Secure_World_Finished_ROOTED (exists-trace): verified (4 steps)
+Correctness_Secure_World_Finished_LOCKED (exists-trace): verified (4 steps)
+Correctness_Attestation_Server_Finished_VALID (exists-trace): verified (4 steps)
+Correctness_Attestation_Server_Finished_INVALID (exists-trace): verified (6 steps)
+Correctness_Developer_Server_Finished (exists-trace): verified (4 steps)
 
 
 ==============================================================================
