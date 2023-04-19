@@ -1,6 +1,11 @@
 /*******************************************************************************
 	Remote attestation Framework
 	Protocol : Attested key exchange (AKE) protocol - based on Key attestation
+	Reference : The protocol is based on :
+	- Attested key exchange protocol, Robert Künnemann AKE.spthy, tamarin-prover ,https://github.com/tamarin-prover/tamarin-prover/blob/master/examples/sapic/fast/feature-locations/AKE.spthy
+	- Attested key exchange protocol, Jacomme, C., Kremer, S. and Scerri, G., 2017, April. Symbolic models for isolated execution environments. In 2017 IEEE European Symposium on Security and Privacy (EuroS&P) (pp. 530-545). IEEE.
+	- Attested key exchange protocol, Barbosa, M., Portela, B., Scerri, G. and Warinschi, B., 2016, March. Foundations of hardware-based attested computation and application to SGX. In 2016 IEEE European Symposium on Security and Privacy (EuroS&P) (pp. 245-260). IEEE.
+
 	Status : Working
 
 	* Processes
